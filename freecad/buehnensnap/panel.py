@@ -221,7 +221,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
             placement, side = dock_deck(read_deck(target), target.getGlobalPlacement(), deck,
                                         pick, self.rotation.currentIndex(),
                                         self.alignment.currentIndex() - 1)
-            obj = insert_deck(document, deck, placement, plan_view=is_plan_view(document))
+            obj = insert_deck(document, deck, placement, plan_view=is_plan_view(document),
+                              target=target)
             self.status.setText(f"{obj.Label} gesetzt · Zielkante {side.lower()}.")
         except Exception as error:
             self.status.setText(str(error))

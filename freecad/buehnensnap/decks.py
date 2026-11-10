@@ -12,6 +12,7 @@ from .docking import Port, UP, mate_ports
 DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
 DECK_PORT = "stage:deck-edge"
+AREA_NUMBER_KEY = "EventCADLastDeckArea"
 
 
 @dataclass(frozen=True)
@@ -69,6 +70,36 @@ def deck_from_pick(obj):
     return obj if is_deck(obj) else None
 
 
+def deck_area(deck):
+    parent = deck.getParentGroup()
+    return parent if getattr(parent, "StageSnapAreaNumber", 0) > 0 else None
+
+
+def area_for_snap(document, target):
+    area = deck_area(target)
+    if area is not None:
+        return area
+
+    numbers = (getattr(obj, "StageSnapAreaNumber", 0) for obj in document.Objects)
+    number = max(int(document.Meta.get(AREA_NUMBER_KEY, "0")), max(numbers, default=0)) + 1
+    while document.getObjectsByLabel(f"Podestfläche {number}"):
+        number += 1
+
+    area = document.addObject("App::DocumentObjectGroup", "Podestflaeche")
+    area.Label = f"Podestfläche {number}"
+    area.addProperty("App::PropertyInteger", "StageSnapAreaNumber", "BühnenSnap")
+    area.StageSnapAreaNumber = number
+    area.setEditorMode("StageSnapAreaNumber", 1)
+
+    parent = target.getParentGroup() or target.getParentGeoFeatureGroup()
+    if parent is not None:
+        parent.addObject(area)
+    symbols = [obj for obj in target.InList if is_deck_symbol(obj) and obj.StageSnapSource == target]
+    area.addObjects([target, *symbols])
+    document.Meta = {**document.Meta, AREA_NUMBER_KEY: str(number)}
+    return area
+
+
 class DeckPlanSymbol:
     """Regenerate the selectable plan face when its source deck changes."""
 
@@ -86,7 +117,7 @@ class DeckPlanSymbol:
 
 
 def make_deck_symbol(document, deck):
-    container = deck.getParentGeoFeatureGroup()
+    container = deck_area(deck) or deck.getParentGeoFeatureGroup()
     if container is None:
         symbol = document.addObject("Part::FeaturePython", "PodestGrundriss")
     else:
@@ -169,11 +200,18 @@ def check_clear(document, deck, placement):
             raise ValueError(f"Das neue Podest überschneidet sich mit „{obj.Label}“.")
 
 
-def insert_deck(document, deck, placement, *, plan_view=False):
+def insert_deck(document, deck, placement, *, plan_view=False, target=None):
     check_clear(document, deck, placement)
     document.openTransaction("Podest setzen")
     try:
-        obj = document.addObject("Part::Box", "Podest")
+        if target is None:
+            obj = document.addObject("Part::Box", "Podest")
+        else:
+            area = area_for_snap(document, target)
+            obj = area.newObject("Part::Box", "Podest")
+            container = obj.getParentGeoFeatureGroup()
+            if container is not None:
+                placement = container.getGlobalPlacement().inverse() * placement
         obj.Label = f"Podest {obj.Name.removeprefix('Podest') or '000'} · {deck.label}"
         obj.Length, obj.Width, obj.Height = deck.dimensions
         obj.Placement = placement
