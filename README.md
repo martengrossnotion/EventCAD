@@ -5,6 +5,7 @@ FreeCAD-Add-on für die Veranstaltungsplanung. Der Arbeitsbereich **Event** brin
 ## Funktionen
 
 - BÜTEC Standard 2 × 1 m, Planungsmaß 1 × 1 m und frei eingestellte Podestmaße.
+- Umschaltbarer 2D-Grundriss und isometrisches 3D-Modell in der Event-Werkzeugleiste.
 - Kanten-Snap per Mausklick mit 0° oder 90° Drehung und drei Kantenausrichtungen.
 - Bündige Oberkanten und Überlappungsprüfung zwischen BühnenSnap-Podesten.
 - Weiterbearbeitung von `.FCStd`-Plänen, die mit dem ursprünglichen BühnenSnap-Makro angelegt wurden.
@@ -20,8 +21,10 @@ Voraussetzung ist FreeCAD 1.0 oder neuer. Das Add-on nutzt die mit FreeCAD gelie
 
 ## Bedienung
 
-Wähle einen Podesttyp und klicke auf **Podest an Koordinaten setzen**. Aktiviere **Andocken starten** und klicke in der Draufsicht knapp innerhalb der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Im Bedienfeld stellst du Drehung und Kantenausrichtung für den nächsten Klick ein.
+Öffne oder erstelle einen Plan und klicke in der Event-Werkzeugleiste auf **2D-Grundriss**. Podeste erscheinen als flache, anklickbare Flächen auf Höhe der jeweiligen Oberkante. Mit **3D-Modell** siehst du dieselben Podeste als Volumenkörper in isometrischer Ansicht. Der Modus wird mit dem Plan gespeichert. Beim ersten Wechsel in den 2D-Grundriss ergänzt EventCAD die Symbole auch für vorhandene BühnenSnap-Podeste.
+
+Wähle einen Podesttyp und klicke auf **Podest an Koordinaten setzen**. Aktiviere **Andocken starten** und klicke knapp innerhalb der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Das funktioniert in beiden Modi. Im Bedienfeld stellst du Drehung und Kantenausrichtung für den nächsten Klick ein. Änderungen an Maßen oder Platzierung nimmst du am Podest im Modellbaum vor.
 
 ## Aufbau
 
-Der Quellcode liegt in `freecad/buehnensnap/`. `docking.py` berechnet die Platzierung über lokale Anschlussrahmen. `decks.py` enthält Katalog und Podestgeometrie. `init_gui.py` registriert den Event-Arbeitsbereich mit seiner Werkzeugleiste.
+Der Quellcode liegt in `freecad/buehnensnap/`. `docking.py` berechnet die Platzierung über lokale Anschlussrahmen. `decks.py` enthält Katalog, Podestkörper und verknüpfte Grundrisssymbole. `view_modes.py` verwaltet die Darstellung pro Dokument. `init_gui.py` registriert den Event-Arbeitsbereich mit seiner Werkzeugleiste.

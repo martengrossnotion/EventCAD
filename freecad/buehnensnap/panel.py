@@ -1,11 +1,14 @@
 """FreeCAD dock panel for placing and snapping stage decks."""
 
 import FreeCAD as App
-import FreeCADGui as Gui
 from pivy import coin
 from PySide import QtCore, QtWidgets
 
-from .decks import CATALOG, Deck, dock_deck, insert_deck, is_deck, read_deck, seed_placement
+from .decks import (
+    CATALOG, Deck, deck_from_pick, dock_deck, insert_deck, is_deck, read_deck, seed_placement,
+)
+from .view_modes import active_3d_view, is_plan_view
+
 
 class StageSnapDock(QtWidgets.QDockWidget):
     def __init__(self, parent):
@@ -111,14 +114,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
         length, width, depth = self.length.value(), self.width.value(), self.depth.value()
         return Deck("custom", f"{length:g} × {width:g} mm", length, width, depth)
 
-    @staticmethod
-    def active_3d_view():
-        document = Gui.activeDocument()
-        view = document.activeView() if document else None
-        return view if hasattr(view, "addEventCallbackPivy") else None
-
     def show_top(self):
-        view = self.active_3d_view()
+        view = active_3d_view()
         if view is None:
             self.status.setText("Öffne zuerst eine 3D-Ansicht deines Plans.")
             return
@@ -133,7 +130,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
             deck = self.current_deck()
             placement = seed_placement(deck, self.x.value(), self.y.value(), self.z.value(),
                                        self.rotation.currentIndex())
-            obj = insert_deck(document, deck, placement)
+            obj = insert_deck(document, deck, placement, plan_view=is_plan_view(document))
             if first_object:
                 self.show_top()
             self.status.setText(f"{obj.Label} gesetzt. Zum Anbauen „Andocken starten“ wählen.")
@@ -146,10 +143,10 @@ class StageSnapDock(QtWidgets.QDockWidget):
             self.status.setText("Andocken beendet.")
             return
         document = App.ActiveDocument
-        view = self.active_3d_view()
+        view = active_3d_view()
         if document is None or view is None or not any(is_deck(obj) for obj in document.Objects):
             self.stop_snap()
-            self.status.setText("Setze zuerst ein BühnenSnap-Podest in der aktuellen 3D-Ansicht.")
+            self.status.setText("Setze zuerst ein BühnenSnap-Podest im aktuellen Plan.")
             return
         try:
             self.view = view
@@ -179,7 +176,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
 
     def check_document(self):
         document = App.ActiveDocument
-        if document is None or document.Name != self.document_name or self.active_3d_view() is None:
+        if document is None or document.Name != self.document_name or active_3d_view() is None:
             self.stop_snap()
             self.status.setText("Die Ansicht hat gewechselt. Starte das Andocken erneut.")
             return False
@@ -199,8 +196,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
             hit = self.view.getObjectInfo(tuple(event.getPosition().getValue()))
             if not hit or hit.get("Document") != document.Name:
                 return
-            target = document.getObject(hit["Object"])
-            if not is_deck(target):
+            target = deck_from_pick(document.getObject(hit["Object"]))
+            if target is None:
                 return
             pick = App.Vector(hit["x"], hit["y"], hit["z"])
             callback.getAction().setHandled()
@@ -224,7 +221,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
             placement, side = dock_deck(read_deck(target), target.getGlobalPlacement(), deck,
                                         pick, self.rotation.currentIndex(),
                                         self.alignment.currentIndex() - 1)
-            obj = insert_deck(document, deck, placement)
+            obj = insert_deck(document, deck, placement, plan_view=is_plan_view(document))
             self.status.setText(f"{obj.Label} gesetzt · Zielkante {side.lower()}.")
         except Exception as error:
             self.status.setText(str(error))

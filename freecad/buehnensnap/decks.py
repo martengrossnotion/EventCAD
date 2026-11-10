@@ -10,6 +10,7 @@ from .docking import Port, UP, mate_ports
 
 
 DECK_KIND = "stage-snap:deck:v1"
+DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
 DECK_PORT = "stage:deck-edge"
 
 
@@ -55,6 +56,57 @@ CATALOG = (
 def is_deck(obj):
     return (obj is not None and obj.TypeId == "Part::Box"
             and getattr(obj, "StageSnapKind", None) == DECK_KIND)
+
+
+def is_deck_symbol(obj):
+    return (obj is not None and obj.TypeId == "Part::FeaturePython"
+            and getattr(obj, "StageSnapKind", None) == DECK_SYMBOL_KIND)
+
+
+def deck_from_pick(obj):
+    if is_deck_symbol(obj):
+        obj = obj.StageSnapSource
+    return obj if is_deck(obj) else None
+
+
+class DeckPlanSymbol:
+    """Regenerate the selectable plan face when its source deck changes."""
+
+    def execute(self, symbol):
+        source = symbol.StageSnapSource
+        if not is_deck(source) or min(source.Length.Value, source.Width.Value) <= 0:
+            symbol.Shape = Part.Shape()
+            return
+        length, width, top = source.Length.Value, source.Width.Value, source.Height.Value
+        corners = [App.Vector(x, y, top) for x, y in (
+            (0, 0), (length, 0), (length, width), (0, width), (0, 0),
+        )]
+        symbol.Shape = Part.Face(Part.makePolygon(corners))
+        symbol.Placement = source.Placement
+
+
+def make_deck_symbol(document, deck):
+    container = deck.getParentGeoFeatureGroup()
+    if container is None:
+        symbol = document.addObject("Part::FeaturePython", "PodestGrundriss")
+    else:
+        symbol = container.newObject("Part::FeaturePython", "PodestGrundriss")
+    symbol.Label = f"{deck.Label} · 2D"
+    symbol.addProperty("App::PropertyString", "StageSnapKind", "BühnenSnap")
+    symbol.StageSnapKind = DECK_SYMBOL_KIND
+    symbol.addProperty("App::PropertyLink", "StageSnapSource", "BühnenSnap")
+    symbol.StageSnapSource = deck
+    for name in ("StageSnapKind", "StageSnapSource", "Placement"):
+        symbol.setEditorMode(name, 1)
+    symbol.Proxy = DeckPlanSymbol()
+    if App.GuiUp:
+        # Activate the built-in shape display of the scripted part feature.
+        symbol.ViewObject.Proxy = 0
+        symbol.ViewObject.ShowInTree = False
+        symbol.ViewObject.ShapeColor = deck.ViewObject.ShapeColor
+        symbol.ViewObject.LineColor = deck.ViewObject.LineColor
+        symbol.ViewObject.Visibility = False
+    return symbol
 
 
 def read_deck(obj):
@@ -117,7 +169,7 @@ def check_clear(document, deck, placement):
             raise ValueError(f"Das neue Podest überschneidet sich mit „{obj.Label}“.")
 
 
-def insert_deck(document, deck, placement):
+def insert_deck(document, deck, placement, *, plan_view=False):
     check_clear(document, deck, placement)
     document.openTransaction("Podest setzen")
     try:
@@ -132,6 +184,9 @@ def insert_deck(document, deck, placement):
         if App.GuiUp:
             obj.ViewObject.ShapeColor = (0.76, 0.63, 0.41)
             obj.ViewObject.LineColor = (0.23, 0.19, 0.14)
+            symbol = make_deck_symbol(document, obj)
+            obj.ViewObject.Visibility = not plan_view
+            symbol.ViewObject.Visibility = plan_view
         document.recompute()
     except Exception:
         document.abortTransaction()
