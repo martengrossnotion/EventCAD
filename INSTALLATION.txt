@@ -1,0 +1,28 @@
+BühnenSnap 1.0.0 · Event-Arbeitsbereich für FreeCAD
+
+Installation unter Windows
+
+1. Entpacke das ZIP-Archiv. Es enthält den Ordner BuehnenSnap.
+2. Öffne im Explorer %APPDATA%\FreeCAD\Mod. Falls nötig, lege Mod an.
+   Den tatsächlichen FreeCAD-Benutzerordner kannst du in FreeCAD über
+   Ansicht > Bedienfelder > Python-Konsole mit diesem Befehl anzeigen:
+
+       print(App.getUserAppDataDir())
+
+   Verwende den Unterordner Mod in dem angezeigten Verzeichnis.
+3. Kopiere den Ordner BuehnenSnap in Mod. Danach liegt die Manifestdatei
+   unter Mod\BuehnenSnap\package.xml.
+4. Starte FreeCAD neu. Wähle oben in der Arbeitsbereichsauswahl Event.
+5. Klicke in der Werkzeugleiste Event auf das Podest-Icon. Damit öffnest
+   du das BühnenSnap-Bedienfeld. Der Befehl steht auch im Menü Event.
+
+Verwendung
+
+Wähle einen Podesttyp und klicke auf „Podest an Koordinaten setzen“.
+Aktiviere „Andocken starten“ und klicke in der Draufsicht knapp innerhalb
+der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Drehen und
+Ausrichten kannst du vor jedem Klick im Bedienfeld.
+
+Bestehende BühnenSnap-Pläne kannst du direkt öffnen und weiterbearbeiten.
+Beim Wechsel in einen anderen Arbeitsbereich endet das Andocken.
+Das Add-on verwendet die mit FreeCAD gelieferten Bibliotheken.

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
+  <name>BuehnenSnap</name>
+  <version>1.0.0</version>
+  <description>Event-Arbeitsbereich für Bühnenpodeste mit Kanten-Snap.</description>
+  <freecadmin>1.0.0</freecadmin>
+  <content>
+    <workbench>
+      <name>Event</name>
+      <classname>EventWorkbench</classname>
+      <subdirectory>./</subdirectory>
+      <icon>freecad/buehnensnap/resources/icons/podest.png</icon>
+    </workbench>
+  </content>
+</package>
