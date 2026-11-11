@@ -9,6 +9,7 @@ import Part
 DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
 AREA_NUMBER_KEY = "EventCADLastDeckArea"
+FRAME_GRAY = 128 / 255
 UP = App.Vector(0, 0, 1)
 PLAN_EDGES = (
     ("Rechts", 0, 1),
@@ -121,6 +122,28 @@ class DeckPlanSymbol:
         symbol.Placement = source.Placement
 
 
+def deck_face_colors(deck):
+    shape = deck.Shape
+    faces = shape.Faces
+    up = shape.Placement.Rotation.multVec(UP)
+    view = deck.ViewObject
+    colors = view.DiffuseColor
+    if len(colors) != len(faces):
+        base_color = colors[0] if colors else view.ShapeColor[:3] + (view.Transparency / 100,)
+        colors = [base_color] * len(faces)
+    return [(face.normalAt(0, 0).dot(up), color) for face, color in zip(faces, colors)]
+
+
+def set_deck_frame_color(deck):
+    faces = deck_face_colors(deck)
+    if any(abs(normal) < 0.5 and max(abs(channel - FRAME_GRAY) for channel in color[:3]) > 1e-6
+           for normal, color in faces):
+        deck.ViewObject.DiffuseColor = [
+            (FRAME_GRAY,) * 3 + color[3:] if abs(normal) < 0.5 else color
+            for normal, color in faces
+        ]
+
+
 def make_deck_symbol(document, deck):
     container = deck_area(deck) or deck.getParentGeoFeatureGroup()
     if container is None:
@@ -139,7 +162,10 @@ def make_deck_symbol(document, deck):
         # Activate the built-in shape display of the scripted part feature.
         symbol.ViewObject.Proxy = 0
         symbol.ViewObject.ShowInTree = False
-        symbol.ViewObject.ShapeColor = deck.ViewObject.ShapeColor
+        symbol.ViewObject.ShapeColor = next(
+            (color[:3] for normal, color in deck_face_colors(deck) if normal > 0.5),
+            deck.ViewObject.ShapeColor,
+        )
         symbol.ViewObject.LineColor = deck.ViewObject.LineColor
         symbol.ViewObject.Visibility = False
     return symbol
@@ -273,6 +299,8 @@ def insert_deck(document, deck, placement, *, plan_view=False, target=None):
             obj.ViewObject.Visibility = not plan_view
             symbol.ViewObject.Visibility = plan_view
         document.recompute()
+        if App.GuiUp:
+            set_deck_frame_color(obj)
     except Exception:
         document.abortTransaction()
         raise

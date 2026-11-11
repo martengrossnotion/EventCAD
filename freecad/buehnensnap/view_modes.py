@@ -2,7 +2,7 @@
 
 import FreeCADGui as Gui
 
-from .decks import deck_from_pick, is_deck, is_deck_symbol, make_deck_symbol
+from .decks import deck_from_pick, is_deck, is_deck_symbol, make_deck_symbol, set_deck_frame_color
 
 
 PLAN_MODE = "2D"
@@ -37,6 +37,8 @@ def show_mode(document, view, mode):
         visible = source.ViewObject.Visibility or bool(symbol and symbol.ViewObject.Visibility)
         if symbol is None and plan_view:
             symbol = make_deck_symbol(document, source)
+        if not plan_view:
+            set_deck_frame_color(source)
         source.ViewObject.Visibility = visible and not plan_view
         if symbol is not None:
             symbol.ViewObject.Visibility = visible and plan_view
