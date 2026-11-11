@@ -6,14 +6,16 @@ from math import isfinite
 import FreeCAD as App
 import Part
 
-from .docking import Port, UP, mate_ports
-
-
 DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
-DECK_PORT = "stage:deck-edge"
 AREA_NUMBER_KEY = "EventCADLastDeckArea"
-FLEXIBLE = "flexible"
+UP = App.Vector(0, 0, 1)
+PLAN_EDGES = (
+    ("Rechts", 0, 1),
+    ("Oben", 1, 1),
+    ("Links", 0, -1),
+    ("Unten", 1, -1),
+)
 
 
 @dataclass(frozen=True)
@@ -31,22 +33,6 @@ class Deck:
     @property
     def dimensions(self):
         return self.length, self.width, self.depth
-
-    def ports(self):
-        length, width, top = self.dimensions
-        # Counterclockwise from the local +X side. Each origin is on the top.
-        edges = (
-            ("Rechts", length, width / 2, width),
-            ("Oben", length / 2, width, length),
-            ("Links", 0, width / 2, width),
-            ("Unten", length / 2, 0, length),
-        )
-        return tuple(
-            Port(key, DECK_PORT, App.Placement(
-                App.Vector(x, y, top), App.Rotation(UP, 90 * index)
-            ), span)
-            for index, (key, x, y, span) in enumerate(edges)
-        )
 
 
 def plate_size_label(length, width):
@@ -165,49 +151,56 @@ def read_deck(obj):
 
 
 def seed_placement(deck, x, y, top, quarter_turn):
-    rotation = App.Rotation(UP, 90 * quarter_turn)
+    portrait_turn = 1 if deck.length >= deck.width else 0
+    rotation = App.Rotation(UP, 90 * (portrait_turn - quarter_turn))
     top_center = App.Vector(deck.length / 2, deck.width / 2, deck.depth)
     return App.Placement(App.Vector(x, y, top) - rotation.multVec(top_center), rotation)
 
 
-def nearest_port_index(ports, point, *, prefer_long=False):
-    def distance_key(port):
-        local = port.frame.inverse().multVec(point)
-        beyond_end = max(0.0, abs(local.y) - port.span / 2)
-        distance = local.x ** 2 + beyond_end ** 2
-        if prefer_long:
-            # Treat floating-point noise at a shared corner as a tie.
-            return round(distance, 12), -port.span
-        return distance
-
-    return min(range(len(ports)), key=lambda index: distance_key(ports[index]))
+def target_plan_size(deck, rotation):
+    if (rotation.multVec(UP) - UP).Length > 1e-7:
+        raise ValueError("Für Autosnap muss das Zielpodest waagerecht liegen.")
+    length_axis = rotation.multVec(App.Vector(1, 0, 0))
+    if abs(length_axis.y) < 1e-7:
+        return deck.length, deck.width
+    if abs(length_axis.x) < 1e-7:
+        return deck.width, deck.length
+    raise ValueError("Für Autosnap müssen die Kanten des Zielpodests parallel zu X und Y liegen.")
 
 
-def dock_deck(target_deck, target_placement, deck, world_pick, quarter_turn, alignment):
-    if (target_placement.Rotation.multVec(UP) - UP).Length > 1e-7:
-        raise ValueError("Zum Andocken muss das Zielpodest waagerecht liegen.")
-    target_ports = target_deck.ports()
-    local_pick = target_placement.inverse().multVec(world_pick)
-    flexible = alignment == FLEXIBLE
-    side = nearest_port_index(target_ports, local_pick, prefer_long=flexible)
-    target = target_ports[side]
-    source_ports = deck.ports()
-    source_index = (side + 2 - quarter_turn) % 4
-    source = source_ports[source_index]
-    # 'Anfang' means lower local X/Y, irrespective of the edge's outward normal.
-    tangent_sign = (1, -1, -1, 1)[side]
-    if flexible:
-        if target.span < max(target_deck.length, target_deck.width):
-            raise ValueError("Klicke für „Flexibel“ knapp innerhalb einer langen Zielkante.")
-        if source.span > min(deck.length, deck.width):
-            source = source_ports[(source_index - 1) % 4]
-        if source.span > target.span:
-            raise ValueError("Die kurze Kante des neuen Podests ist länger als die Zielkante.")
-        cursor_along_edge = target.frame.inverse().multVec(local_pick).y
-        alignment = 1 if cursor_along_edge * tangent_sign > 0 else -1
+def snap_placements(target_deck, target_placement, deck, world_pick, quarter_turn):
+    """Find the preferred and alternate corner placements on the same plan edge."""
+    target_size = target_plan_size(target_deck, target_placement.Rotation)
+    source_size = sorted((deck.length, deck.width), reverse=bool(quarter_turn))
+    center = target_placement.multVec(App.Vector(
+        target_deck.length / 2, target_deck.width / 2, target_deck.depth,
+    ))
+    pick = (world_pick.x - center.x, world_pick.y - center.y)
 
-    offset = alignment * tangent_sign * (target.span - source.span) / 2
-    return mate_ports(target_placement, target, source, offset), target.key
+    def distance_squared(edge):
+        _, normal, sign = edge
+        tangent = 1 - normal
+        distance = pick[normal] - sign * target_size[normal] / 2
+        beyond_end = max(0, abs(pick[tangent]) - target_size[tangent] / 2)
+        return distance ** 2 + beyond_end ** 2
+
+    side, normal, sign = min(PLAN_EDGES, key=distance_squared)
+    tangent = 1 - normal
+    end = 1 if pick[tangent] > 0 else -1
+    normal_offset = sign * (target_size[normal] + source_size[normal]) / 2
+    # The signed difference also aligns corners when the new edge overhangs.
+    tangent_offset = end * (target_size[tangent] - source_size[tangent]) / 2
+
+    def at_corner(offset):
+        shift = [0, 0]
+        shift[normal] = normal_offset
+        shift[tangent] = offset
+        return seed_placement(deck, center.x + shift[0], center.y + shift[1],
+                              center.z, quarter_turn)
+
+    preferred = at_corner(tangent_offset)
+    alternate = at_corner(-tangent_offset) if tangent_offset else None
+    return preferred, alternate, side
 
 
 def make_box(deck, placement):
@@ -226,6 +219,10 @@ def positive_bounds_overlap(a, b):
                for min_a, max_a, min_b, max_b in axes)
 
 
+class DeckOverlapError(ValueError):
+    """A placement intersects an existing stage deck."""
+
+
 def check_clear(document, deck, placement):
     shape = make_box(deck, placement)
     bounds = shape.BoundBox
@@ -234,7 +231,20 @@ def check_clear(document, deck, placement):
             continue
         other = make_box(read_deck(obj), obj.getGlobalPlacement())
         if positive_bounds_overlap(bounds, other.BoundBox) and shape.common(other).Volume > 1e-4:
-            raise ValueError(f"Das neue Podest überschneidet sich mit „{obj.Label}“.")
+            raise DeckOverlapError(f"Das neue Podest überschneidet sich mit „{obj.Label}“.")
+
+
+def snap_deck(document, target, deck, world_pick, quarter_turn, *, plan_view=False):
+    preferred, alternate, side = snap_placements(
+        read_deck(target), target.getGlobalPlacement(), deck, world_pick, quarter_turn,
+    )
+    try:
+        obj = insert_deck(document, deck, preferred, plan_view=plan_view, target=target)
+    except DeckOverlapError:
+        if alternate is None:
+            raise
+        obj = insert_deck(document, deck, alternate, plan_view=plan_view, target=target)
+    return obj, side
 
 
 def insert_deck(document, deck, placement, *, plan_view=False, target=None):

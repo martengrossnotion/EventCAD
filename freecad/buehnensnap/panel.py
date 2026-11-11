@@ -5,8 +5,7 @@ from pivy import coin
 from PySide import QtCore, QtWidgets
 
 from .decks import (
-    CATALOG, FLEXIBLE, Deck, deck_from_pick, dock_deck, insert_deck, is_deck, plate_size_label,
-    read_deck, seed_placement,
+    CATALOG, Deck, deck_from_pick, insert_deck, is_deck, plate_size_label, seed_placement, snap_deck,
 )
 from .view_modes import active_3d_view, is_plan_view
 
@@ -48,11 +47,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
         form.addRow("Breite", self.width)
         form.addRow("Körperhöhe", self.depth)
         self.rotation = QtWidgets.QComboBox()
-        self.rotation.addItems(["0°", "90°"])
-        self.rotation.setToolTip(
-            "Beim Andocken relativ zum Zielpodest, sonst relativ zur X-Achse. "
-            "„Flexibel“ dreht das Podest bei Bedarf auf seine kurze Kante."
-        )
+        self.rotation.addItems(["0° Hochkant", "90° Quer"])
+        self.rotation.setToolTip("Ausrichtung neuer Podeste im Grundriss, auch beim Andocken.")
         form.addRow("Drehung", self.rotation)
         self.system.currentTextChanged.connect(self.update_plate_sizes)
         self.plate_size.currentIndexChanged.connect(self.update_dimensions)
@@ -72,17 +68,6 @@ class StageSnapDock(QtWidgets.QDockWidget):
 
         docking = QtWidgets.QGroupBox("Autosnap")
         form = QtWidgets.QFormLayout(docking)
-        self.alignment = QtWidgets.QComboBox()
-        for label, value in (
-            ("Kantenanfang", -1), ("Kantenmitte", 0), ("Kantenende", 1), ("Flexibel", FLEXIBLE),
-        ):
-            self.alignment.addItem(label, value)
-        self.alignment.setCurrentIndex(1)
-        self.alignment.setToolTip(
-            "Anfang und Ende folgen den lokalen Achsen des Zielpodests. "
-            "„Flexibel“ setzt die kurze Kante bündig an das angeklickte Ende der langen Zielkante."
-        )
-        form.addRow("Ausrichtung", self.alignment)
         self.snap_button = QtWidgets.QPushButton("Autosnap starten")
         self.snap_button.setCheckable(True)
         self.snap_button.toggled.connect(self.toggle_snap)
@@ -175,7 +160,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
             self.mouse_handle = view.addEventCallbackPivy(self.mouse_type, self.on_click)
             self.monitor.start()
             self.snap_button.setText("Autosnap beenden")
-            self.status.setText("Klicke auf die gewünschte Podestkante. Der Modus bleibt aktiv.")
+            self.status.setText("Klicke am Zielpodest in die Nähe der gewünschten Kante und Ecke.")
         except Exception as error:
             self.stop_snap()
             self.status.setText(str(error))
@@ -239,11 +224,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
             return
         try:
             deck = self.current_deck()
-            placement, side = dock_deck(read_deck(target), target.getGlobalPlacement(), deck,
-                                        pick, self.rotation.currentIndex(),
-                                        self.alignment.currentData())
-            obj = insert_deck(document, deck, placement, plan_view=is_plan_view(document),
-                              target=target)
+            obj, side = snap_deck(document, target, deck, pick, self.rotation.currentIndex(),
+                                  plan_view=is_plan_view(document))
             self.status.setText(f"{obj.Label} gesetzt · Zielkante {side.lower()}.")
         except Exception as error:
             self.status.setText(str(error))

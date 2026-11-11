@@ -1,4 +1,4 @@
-BühnenSnap 1.3.0 · Event-Arbeitsbereich für FreeCAD
+BühnenSnap 1.4.0 · Event-Arbeitsbereich für FreeCAD
 
 Installation unter Windows
 
@@ -22,10 +22,11 @@ Wähle in der Event-Werkzeugleiste „2D-Grundriss“ für flache, anklickbare
 Podestsymbole oder „3D-Modell“ für die Körper in isometrischer Ansicht.
 Wähle „Podestsystem“ und „Plattenmaß“ und klicke auf „Podest an
 Koordinaten setzen“. Freie Maße findest du unter „Planungsmaß > Eigenes Maß“.
+„Drehung“ setzt neue Podeste im Grundriss bei 0° hochkant und bei 90° quer.
 Aktiviere „Autosnap starten“ und klicke knapp innerhalb der gewünschten
-Kante eines vorhandenen BühnenSnap-Podests. Mit „Flexibel“ rastet die kurze
-Seite des neuen Podests an der langen Zielkante ein. Die angeklickte
-Kantenhälfte bestimmt, an welcher Ecke es bündig sitzt.
+Kante eines vorhandenen BühnenSnap-Podests. Das neue Podest rastet bündig
+an der näheren Ecke ein. Ist die Position belegt, probiert Autosnap die
+andere Ecke derselben Kante.
 
 Bestehende BühnenSnap-Pläne kannst du direkt öffnen und weiterbearbeiten.
 Beim Wechsel in einen anderen Arbeitsbereich endet Autosnap.
