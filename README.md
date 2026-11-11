@@ -4,9 +4,9 @@ FreeCAD-Add-on für die Veranstaltungsplanung. Der Arbeitsbereich **Event** brin
 
 ## Funktionen
 
-- BÜTEC Standard 2 × 1 m, Planungsmaß 1 × 1 m und frei eingestellte Podestmaße.
+- Getrennte Auswahl für Podestsystem und Plattenmaß mit BÜTEC Standard, nivtec Standard und freien Planungsmaßen.
 - Umschaltbarer 2D-Grundriss und isometrisches 3D-Modell in der Event-Werkzeugleiste.
-- Kanten-Snap per Mausklick mit 0° oder 90° Drehung und drei Kantenausrichtungen.
+- Autosnap per Mausklick mit Kantenanfang, Kantenmitte, Kantenende und flexibler Ausrichtung.
 - Bündige Oberkanten und Überlappungsprüfung zwischen BühnenSnap-Podesten.
 - Weiterbearbeitung von `.FCStd`-Plänen, die mit dem ursprünglichen BühnenSnap-Makro angelegt wurden.
 
@@ -23,7 +23,9 @@ Voraussetzung ist FreeCAD 1.0 oder neuer. Das Add-on nutzt die mit FreeCAD gelie
 
 Öffne oder erstelle einen Plan und klicke in der Event-Werkzeugleiste auf **2D-Grundriss**. Podeste erscheinen als flache, anklickbare Flächen auf Höhe der jeweiligen Oberkante. Mit **3D-Modell** siehst du dieselben Podeste als Volumenkörper in isometrischer Ansicht. Der Modus wird mit dem Plan gespeichert. Beim ersten Wechsel in den 2D-Grundriss ergänzt EventCAD die Symbole auch für vorhandene BühnenSnap-Podeste.
 
-Wähle einen Podesttyp und klicke auf **Podest an Koordinaten setzen**. Aktiviere **Andocken starten** und klicke knapp innerhalb der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Das funktioniert in beiden Modi. Im Bedienfeld stellst du Drehung und Kantenausrichtung für den nächsten Klick ein. Änderungen an Maßen oder Platzierung nimmst du am Podest im Modellbaum vor.
+Wähle **Podestsystem** und **Plattenmaß** und klicke auf **Podest an Koordinaten setzen**. Unter **Planungsmaß → Eigenes Maß** kannst du Länge, Breite und Körperhöhe frei eingeben. Aktiviere **Autosnap starten** und klicke knapp innerhalb der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Das funktioniert in beiden Ansichten. Änderungen an vorhandenen Podesten nimmst du im Modellbaum vor.
+
+Mit der Ausrichtung **Flexibel** legst du die kurze Seite des neuen Podests an die lange Seite des vorhandenen. Klicke in die Hälfte der Zielkante, an deren Ecke das neue Podest bündig sitzen soll. BühnenSnap wählt bei Bedarf die passende 90°-Drehung.
 
 ## Aufbau
 

@@ -13,6 +13,7 @@ DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
 DECK_PORT = "stage:deck-edge"
 AREA_NUMBER_KEY = "EventCADLastDeckArea"
+FLEXIBLE = "flexible"
 
 
 @dataclass(frozen=True)
@@ -48,10 +49,28 @@ class Deck:
         )
 
 
-CATALOG = (
-    Deck("buetec-standard-2000-1000", "BÜTEC Standard · 2 × 1 m", 2000, 1000, 90),
-    Deck("planning-1000-1000", "Planungsmaß · 1 × 1 m", 1000, 1000, 90),
-)
+def plate_size_label(length, width):
+    return f"{length / 1000:g} × {width / 1000:g} m".replace(".", ",")
+
+
+def system_decks(system_id, system_label, sizes):
+    for length, width in sizes:
+        size_label = plate_size_label(length, width)
+        yield Deck(f"{system_id}-{length}-{width}", f"{system_label} · {size_label}",
+                   length, width, 90)
+
+
+CATALOG = {
+    "BÜTEC Standard": tuple(system_decks("buetec-standard", "BÜTEC Standard", (
+        (2000, 1000), (1000, 1000),
+    ))),
+    "nivtec Standard": tuple(system_decks("nivtec-standard", "nivtec Standard", (
+        (2000, 1000), (1500, 1000), (1000, 1000),
+        (2000, 750), (1500, 750), (1000, 750),
+        (2000, 500), (1500, 500), (1000, 500), (500, 500),
+    ))),
+    "Planungsmaß": (Deck("planning-1000-1000", "Planungsmaß · 1 × 1 m", 1000, 1000, 90), None),
+}
 
 
 def is_deck(obj):
@@ -151,24 +170,42 @@ def seed_placement(deck, x, y, top, quarter_turn):
     return App.Placement(App.Vector(x, y, top) - rotation.multVec(top_center), rotation)
 
 
-def nearest_port_index(ports, point):
-    def distance_squared(port):
+def nearest_port_index(ports, point, *, prefer_long=False):
+    def distance_key(port):
         local = port.frame.inverse().multVec(point)
         beyond_end = max(0.0, abs(local.y) - port.span / 2)
-        return local.x ** 2 + beyond_end ** 2
+        distance = local.x ** 2 + beyond_end ** 2
+        if prefer_long:
+            # Treat floating-point noise at a shared corner as a tie.
+            return round(distance, 12), -port.span
+        return distance
 
-    return min(range(len(ports)), key=lambda index: distance_squared(ports[index]))
+    return min(range(len(ports)), key=lambda index: distance_key(ports[index]))
 
 
 def dock_deck(target_deck, target_placement, deck, world_pick, quarter_turn, alignment):
     if (target_placement.Rotation.multVec(UP) - UP).Length > 1e-7:
         raise ValueError("Zum Andocken muss das Zielpodest waagerecht liegen.")
     target_ports = target_deck.ports()
-    side = nearest_port_index(target_ports, target_placement.inverse().multVec(world_pick))
+    local_pick = target_placement.inverse().multVec(world_pick)
+    flexible = alignment == FLEXIBLE
+    side = nearest_port_index(target_ports, local_pick, prefer_long=flexible)
     target = target_ports[side]
-    source = deck.ports()[(side + 2 - quarter_turn) % 4]
+    source_ports = deck.ports()
+    source_index = (side + 2 - quarter_turn) % 4
+    source = source_ports[source_index]
     # 'Anfang' means lower local X/Y, irrespective of the edge's outward normal.
     tangent_sign = (1, -1, -1, 1)[side]
+    if flexible:
+        if target.span < max(target_deck.length, target_deck.width):
+            raise ValueError("Klicke für „Flexibel“ knapp innerhalb einer langen Zielkante.")
+        if source.span > min(deck.length, deck.width):
+            source = source_ports[(source_index - 1) % 4]
+        if source.span > target.span:
+            raise ValueError("Die kurze Kante des neuen Podests ist länger als die Zielkante.")
+        cursor_along_edge = target.frame.inverse().multVec(local_pick).y
+        alignment = 1 if cursor_along_edge * tangent_sign > 0 else -1
+
     offset = alignment * tangent_sign * (target.span - source.span) / 2
     return mate_ports(target_placement, target, source, offset), target.key
 
