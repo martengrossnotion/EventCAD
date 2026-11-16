@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from math import isfinite
+from pathlib import Path
 
 import FreeCAD as App
 import Part
@@ -10,6 +11,7 @@ DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
 AREA_NUMBER_KEY = "EventCADLastDeckArea"
 FRAME_GRAY = 128 / 255
+MODELS_DIR = Path(__file__).resolve().parent / "resources" / "models"
 UP = App.Vector(0, 0, 1)
 PLAN_EDGES = (
     ("Rechts", 0, 1),
@@ -26,6 +28,7 @@ class Deck:
     length: float
     width: float
     depth: float
+    model_file: str | None = None
 
     def __post_init__(self):
         if not all(isfinite(size) and size > 0 for size in self.dimensions):
@@ -44,7 +47,7 @@ def system_decks(system_id, system_label, sizes):
     for length, width in sizes:
         size_label = plate_size_label(length, width)
         yield Deck(f"{system_id}-{length}-{width}", f"{system_label} · {size_label}",
-                   length, width, 90)
+                   length, width, 90, f"{system_id}/{length}x{width}.step")
 
 
 CATALOG = {
@@ -56,12 +59,13 @@ CATALOG = {
         (2000, 750), (1500, 750), (1000, 750),
         (2000, 500), (1500, 500), (1000, 500), (500, 500),
     ))),
-    "Planungsmaß": (Deck("planning-1000-1000", "Planungsmaß · 1 × 1 m", 1000, 1000, 90), None),
+    "Planungsmaß": (Deck("planning-1000-1000", "Planungsmaß · 1 × 1 m", 1000, 1000, 90,
+                         "planning/1000x1000.step"), None),
 }
 
 
 def is_deck(obj):
-    return (obj is not None and obj.TypeId == "Part::Box"
+    return (obj is not None and obj.TypeId in ("Part::Box", "Part::Feature")
             and getattr(obj, "StageSnapKind", None) == DECK_KIND)
 
 
@@ -235,6 +239,30 @@ def make_box(deck, placement):
     return shape
 
 
+def load_deck_model(deck):
+    path = MODELS_DIR / deck.model_file
+    if not path.is_file():
+        raise ValueError(f"STEP-Modell fehlt: {path}")
+
+    try:
+        shape = Part.read(str(path))
+        if shape.isNull() or not shape.Solids or not shape.isValid():
+            raise ValueError("Die Datei muss gültige Volumenkörper enthalten.")
+    except Exception as error:
+        raise ValueError(f"STEP-Modell konnte nicht geladen werden: {path}\n{error}") from error
+
+    bounds = shape.BoundBox
+    if abs(bounds.XLength - deck.length) > 0.1 or abs(bounds.YLength - deck.width) > 0.1:
+        raise ValueError(f"STEP-Modell {path.name}: Grundfläche muss in X × Y "
+                         f"{deck.length:g} × {deck.width:g} mm messen. "
+                         f"Gemessen: {bounds.XLength:g} × {bounds.YLength:g} mm.")
+
+    # Align the footprint and the upper surface with the planning dimensions.
+    shape.translate(App.Vector(-bounds.XMin, -bounds.YMin, deck.depth - bounds.ZMax))
+    # Keep the imported transform inside the shape when the document object is placed.
+    return Part.Compound([shape]) if not shape.Placement.isIdentity() else shape
+
+
 def positive_bounds_overlap(a, b):
     axes = (
         (a.XMin, a.XMax, b.XMin, b.XMax),
@@ -275,17 +303,24 @@ def snap_deck(document, target, deck, world_pick, quarter_turn, *, plan_view=Fal
 
 def insert_deck(document, deck, placement, *, plan_view=False, target=None):
     check_clear(document, deck, placement)
+    model = load_deck_model(deck) if deck.model_file else None
+    type_id = "Part::Feature" if model is not None else "Part::Box"
     document.openTransaction("Podest setzen")
     try:
         if target is None:
-            obj = document.addObject("Part::Box", "Podest")
+            obj = document.addObject(type_id, "Podest")
         else:
             area = area_for_snap(document, target)
-            obj = area.newObject("Part::Box", "Podest")
+            obj = area.newObject(type_id, "Podest")
             container = obj.getParentGeoFeatureGroup()
             if container is not None:
                 placement = container.getGlobalPlacement().inverse() * placement
         obj.Label = f"Podest {obj.Name.removeprefix('Podest') or '000'} · {deck.label}"
+        if model is not None:
+            obj.Shape = model
+            for name in ("Length", "Width", "Height"):
+                obj.addProperty("App::PropertyLength", name, "BühnenSnap")
+                obj.setEditorMode(name, 1)
         obj.Length, obj.Width, obj.Height = deck.dimensions
         obj.Placement = placement
         for prop, value in (("StageSnapKind", DECK_KIND), ("StageSnapCatalogId", deck.catalog_id)):

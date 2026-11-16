@@ -23,11 +23,23 @@ Voraussetzung ist FreeCAD 1.0 oder neuer. Das Add-on nutzt die mit FreeCAD gelie
 
 Öffne oder erstelle einen Plan und klicke in der Event-Werkzeugleiste auf **2D-Grundriss**. Podeste erscheinen als flache, anklickbare Flächen auf Höhe der jeweiligen Oberkante. Mit **3D-Modell** siehst du dieselben Podeste als Volumenkörper in isometrischer Ansicht. Der Modus wird mit dem Plan gespeichert. Beim ersten Wechsel in den 2D-Grundriss ergänzt EventCAD die Symbole auch für vorhandene BühnenSnap-Podeste.
 
-Wähle **Podestsystem** und **Plattenmaß** und klicke auf **Podest an Koordinaten setzen**. Unter **Planungsmaß → Eigenes Maß** kannst du Länge, Breite und Körperhöhe frei eingeben. Aktiviere **Autosnap starten** und klicke knapp innerhalb der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Das funktioniert in beiden Ansichten. Änderungen an vorhandenen Podesten nimmst du im Modellbaum vor.
+Wähle **Podestsystem** und **Plattenmaß** und klicke auf **Podest an Koordinaten setzen**. Unter **Planungsmaß → Eigenes Maß** kannst du Länge, Breite und Körperhöhe frei eingeben. Aktiviere **Autosnap starten** und klicke knapp innerhalb der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Das funktioniert in beiden Ansichten. Die Position vorhandener Podeste kannst du im Modellbaum ändern. Für eine andere Kataloggröße setzt du das Podest mit dem gewünschten Plattenmaß neu.
 
 **Drehung** stellt jedes neue Podest im Grundriss **0° hochkant** oder **90° quer**. Das gilt für Startpodeste und für Autosnap. Der Klick wählt die nächstgelegene Zielkante und das nähere Ende dieser Kante. Dort liegen die Ecken bündig, auch wenn eine Platte übersteht. Ist die Position durch ein anderes Podest belegt, probiert Autosnap das andere Ende derselben Kante. Sind beide Positionen belegt, erscheint eine Meldung und der Plan wird nicht geändert.
 
 Autosnap setzt voraus, dass die Kanten des Zielpodests parallel zu den X- und Y-Achsen des Plans verlaufen.
+
+## Ein 3D-Modell austauschen
+
+Die mitgelieferten STEP-Dateien bilden die bisherigen Podeste als einfache Quader ab. Jede feste Größe hat eine eigene Datei. Unter `freecad/buehnensnap/resources/models/` liegen die Unterordner `buetec-standard/`, `nivtec-standard/` und `planning/`. **Planungsmaß → Eigenes Maß** erzeugt einen Quader passend zu den eingegebenen Maßen.
+
+1. Öffne in FreeCAD **Ansicht → Bedienfelder → Python-Konsole** und gib `print(App.getUserAppDataDir())` ein. Öffne im Explorer den ausgegebenen Ordner und darunter `Mod`, deinen EventCAD-Ordner und `freecad/buehnensnap/resources/models/`.
+2. Suche das Modell nach System und Plattenmaß. Für **BÜTEC Standard, 2 × 1 m** ist das `buetec-standard/2000x1000.step`. Sichere die Originaldatei, bevor du sie ersetzt.
+3. Öffne die STEP-Datei als Ausgangspunkt in FreeCAD oder erstelle ein eigenes Modell. Richte das Modell so aus, dass die Plattenlänge in X, die Breite in Y und die Höhe in Z verläuft. Der gesamte Körper muss in X × Y das Katalogmaß haben. Die Trittfläche muss am höchsten Punkt liegen. Steckbeine können nach unten reichen. EventCAD setzt die Oberkante beim Platzieren automatisch auf die eingestellte Z-Höhe.
+4. Wähle im Modellbaum die fertigen Volumenkörper aus. Exportiere sie über **Datei → Exportieren** als **STEP**. Speichere deine bearbeitbare FreeCAD-Konstruktion bei Bedarf zusätzlich als `.FCStd`.
+5. Ersetze die Datei im Add-on-Ordner unter demselben Namen einschließlich `.step`. Setze in EventCAD ein neues Podest derselben Größe und prüfe es über **3D-Modell**. EventCAD liest die Datei beim Platzieren ein. Bei einem falschen Maß oder einer ungültigen Datei erscheint eine Meldung im BühnenSnap-Bedienfeld.
+
+Die Geometrie wird in der Plandatei gespeichert. Für bereits platzierte Podeste kannst du das neue Modell übernehmen, indem du sie neu setzt. Grundriss, Autosnap und Kollisionsprüfung verwenden weiterhin die Katalogmaße. Die Darstellung verwendet die EventCAD-Farben.
 
 ## Aufbau
 

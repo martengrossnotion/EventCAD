@@ -1,4 +1,4 @@
-BühnenSnap 1.4.0 · Event-Arbeitsbereich für FreeCAD
+BühnenSnap 1.5.0 · Event-Arbeitsbereich für FreeCAD
 
 Installation unter Windows
 
@@ -31,3 +31,5 @@ andere Ecke derselben Kante.
 Bestehende BühnenSnap-Pläne kannst du direkt öffnen und weiterbearbeiten.
 Beim Wechsel in einen anderen Arbeitsbereich endet Autosnap.
 Das Add-on verwendet die mit FreeCAD gelieferten Bibliotheken.
+
+Die Anleitung zum Austausch der STEP-Modelle findest du in README.md.
