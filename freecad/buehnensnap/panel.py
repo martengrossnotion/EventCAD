@@ -137,7 +137,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
             except ValueError as error:
                 self.model_error = str(error)
         elif self.plan_symbol.currentIndex() < 0:
-            self.model_error = "Für dieses Podestsystem wurden keine STEP-Modelle gefunden."
+            self.model_error = "Für dieses Podestsystem wurden keine FCStd-Modelle gefunden."
         if self.model_error:
             self.status.setText(self.model_error)
 
@@ -270,3 +270,4 @@ class StageSnapDock(QtWidgets.QDockWidget):
         if not visible and self.mouse_handle is not None:
             self.stop_snap()
             self.status.setText("Autosnap beendet.")
+

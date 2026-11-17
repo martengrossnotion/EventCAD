@@ -1,41 +1,28 @@
-BühnenSnap 1.6.0 · Event-Arbeitsbereich für FreeCAD
+EventCAD 1.7.0 – Event-Arbeitsbereich für FreeCAD
 
-Installation unter Windows
+Voraussetzung: FreeCAD 1.0 oder neuer.
 
-1. Entpacke das ZIP-Archiv. Beim GitHub-Download heißt der Ordner EventCAD-main.
-2. Öffne im Explorer %APPDATA%\FreeCAD\Mod. Falls nötig, lege Mod an.
-   Den tatsächlichen FreeCAD-Benutzerordner kannst du in FreeCAD über
-   Ansicht > Bedienfelder > Python-Konsole mit diesem Befehl anzeigen:
+Über den Addon-Manager aktualisieren und FreeCAD neu starten.
+Repository: https://github.com/martengrossnotion/EventCAD
 
-       print(App.getUserAppDataDir())
+Manuell: ZIP entpacken und den Add-on-Ordner in den Unterordner Mod
+des FreeCAD-Benutzerordners kopieren. package.xml muss direkt darin liegen.
+Unter Windows üblicherweise: %APPDATA%\FreeCAD\Mod\EventCAD\package.xml
+Vermeide parallele Installationen. Starte FreeCAD anschließend neu.
 
-   Verwende den Unterordner Mod in dem angezeigten Verzeichnis.
-3. Kopiere den entpackten Add-on-Ordner in Mod. Die Datei package.xml
-   liegt direkt in diesem Ordner, zum Beispiel unter Mod\EventCAD-main\package.xml.
-4. Starte FreeCAD neu. Wähle oben in der Arbeitsbereichsauswahl Event.
-5. Klicke in der Werkzeugleiste Event auf das Podest-Icon. Damit öffnest
-   du das BühnenSnap-Bedienfeld. Der Befehl steht auch im Menü Event.
+Wähle den Arbeitsbereich Event und öffne das Podest-Icon.
+Wähle Podestsystem und Plansymbol, setze ein Startpodest und verwende
+Autosnap zum bündigen Andocken. Die Werkzeugleiste schaltet zwischen
+2D-Grundriss und 3D-Modell um.
 
-Verwendung
+Pro Symbol liegt unter resources/models/<System>/<Symbol>/ genau eine
+FCStd-Datei. Sie enthält die getrennten Geometrieobjekte Symbol3D und
+Symbol2D. STEP-Dateien werden nicht mehr als Bibliotheksmodelle geladen.
+Die vorhandenen STEP-Geometrien wurden in echte FCStd-Dateien übernommen.
 
-Wähle in der Event-Werkzeugleiste „2D-Grundriss“ für flache, anklickbare
-Podestsymbole oder „3D-Modell“ für die Körper in isometrischer Ansicht.
-Wähle „Podestsystem“ und „Plansymbol“ und klicke auf „Podest an
-Koordinaten setzen“. Freie Maße findest du unter „Planungsmaß > Eigenes Maß“.
-„Drehung“ setzt neue Podeste im Grundriss bei 0° hochkant und bei 90° quer.
-Aktiviere „Autosnap starten“ und klicke knapp innerhalb der gewünschten
-Kante eines vorhandenen BühnenSnap-Podests. Das neue Podest rastet bündig
-an der näheren Ecke ein. Ist die Position belegt, probiert Autosnap die
-andere Ecke derselben Kante.
+Gleiche Symbole verwenden gemeinsame, im Plan eingebettete Vorlagen und
+App::Link-Instanzen. Bereits platzierte Objekte behalten ihre Dateirevision.
+Alte Pläne bleiben verwendbar; neue Platzierungen nutzen die Link-Verwaltung.
 
-Bestehende BühnenSnap-Pläne kannst du direkt öffnen und weiterbearbeiten.
-Beim Wechsel in einen anderen Arbeitsbereich endet Autosnap.
-Das Add-on verwendet die mit FreeCAD gelieferten Bibliotheken.
+Details zu Modellaufbau, Austausch und Bedienung stehen in README.md.
 
-Die Anleitung zum Hinzufügen und Austauschen von STEP-Modellen steht in README.md.
-Jedes Symbol hat einen eigenen Unterordner unter resources/models/<System>/.
-Dieser enthält genau eine STEP-Datei für 3D und eine FCStd-Datei für 2D.
-Die Dateinamen sind frei wählbar. Die FCStd-Datei enthält flache Geometrie
-in der XY-Ebene im gleichen Maßstab. Beim Wechsel zu „2D-Grundriss“ wird
-sie geladen; ohne Datei erscheint ein Rechteck bzw. das bereits im Plan
-gespeicherte 2D-Symbol.

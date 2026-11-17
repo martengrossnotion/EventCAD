@@ -1,69 +1,66 @@
 # EventCAD
 
-FreeCAD-Add-on für die Veranstaltungsplanung. Der Arbeitsbereich **Event** bringt eine eigene Werkzeugleiste mit. Über das Podest-Icon öffnet sich **BühnenSnap**, die Bibliothek zum Platzieren und Andocken von Bühnenpodesten.
+FreeCAD-Add-on für Veranstaltungsplanung. Der Arbeitsbereich **Event** bietet BühnenSnap zum Platzieren und Andocken von Bühnenpodesten sowie umschaltbare 2D- und 3D-Darstellungen. Voraussetzung: FreeCAD 1.0 oder neuer.
 
-## Funktionen
+## Installation und Update
 
-- Auswahl von Podestsystem und Plansymbol aus der STEP-Modellbibliothek, mit freien Planungsmaßen.
-- Ein Ordner je Symbol mit STEP für 3D und FCStd für den umschaltbaren 2D-Grundriss.
-- Autosnap per Mausklick an die nächste Kante und Ecke, mit Ausweichposition bei Kollision.
-- Bündige Oberkanten und Überlappungsprüfung zwischen BühnenSnap-Podesten.
-- Weiterbearbeitung von `.FCStd`-Plänen, die mit dem ursprünglichen BühnenSnap-Makro angelegt wurden.
+Installiere bzw. aktualisiere EventCAD über den FreeCAD Addon-Manager mit dem Repository `https://github.com/martengrossnotion/EventCAD`. Starte FreeCAD danach neu.
 
-## Installation
-
-Voraussetzung ist FreeCAD 1.0 oder neuer. Das Add-on nutzt die mit FreeCAD gelieferten Python-Bibliotheken.
-
-1. Lade den Quellcode über **Code → Download ZIP** herunter und entpacke ihn.
-2. Ermittle bei Bedarf in FreeCAD über **Ansicht → Bedienfelder → Python-Konsole** mit `print(App.getUserAppDataDir())` den Benutzerordner. Unter Windows liegt er üblicherweise in `%APPDATA%\FreeCAD`.
-3. Kopiere den entpackten Ordner in den Unterordner `Mod`. Lege `Mod` bei Bedarf an. Die `package.xml` muss direkt im Add-on-Ordner liegen, etwa unter `Mod/EventCAD-main/package.xml`.
-4. Starte FreeCAD neu, wähle **Event** und klicke auf das Podest-Icon.
+Manuell: **Code → Download ZIP**, entpacken und den Add-on-Ordner nach `Mod` im FreeCAD-Benutzerordner kopieren. `package.xml` muss direkt im Add-on-Ordner liegen. Den Benutzerordner ermittelst du in der FreeCAD-Python-Konsole mit `print(App.getUserAppDataDir())`; unter Windows normalerweise `%APPDATA%/FreeCAD`. Vermeide mehrere EventCAD-Installationen parallel.
 
 ## Bedienung
 
-Öffne oder erstelle einen Plan und klicke in der Event-Werkzeugleiste auf **2D-Grundriss**. Podeste erscheinen mit ihrem 2D-Symbol auf Höhe der jeweiligen Oberkante. EventCAD verwendet die **FCStd-Datei im Symbolordner** für die 2D-Darstellung und die **STEP-Datei desselben Ordners** für 3D. Die beiden Dateien dürfen unterschiedlich heißen. Mit **3D-Modell** siehst du dieselben Podeste als Volumenkörper in isometrischer Ansicht. Der Modus wird mit dem Plan gespeichert. Beim ersten Wechsel in den 2D-Grundriss ergänzt EventCAD die Symbole auch für vorhandene BühnenSnap-Podeste.
+1. Öffne oder erstelle einen Plan und wähle den Arbeitsbereich **Event**.
+2. Öffne über das Podest-Icon das BühnenSnap-Bedienfeld.
+3. Wähle **Podestsystem** und **Plansymbol**. Unter **Planungsmaß → Eigenes Maß** kannst du Länge, Breite und Körperhöhe frei eingeben.
+4. Setze ein Startpodest über **Podest an Koordinaten setzen**. X/Y bezeichnen die Mitte, Z die Oberkante. **Drehung** wählt 0° hochkant oder 90° quer.
+5. Aktiviere **Autosnap starten** und klicke knapp innerhalb der gewünschten Kante und Ecke eines vorhandenen Podests. Bei einer Kollision wird die andere Ecke derselben Kante versucht. Sind beide Positionen belegt, bleibt der Plan unverändert.
 
-Wähle **Podestsystem** und **Plansymbol** und klicke auf **Podest an Koordinaten setzen**. Unter **Planungsmaß → Eigenes Maß** kannst du Länge, Breite und Körperhöhe frei eingeben. Aktiviere **Autosnap starten** und klicke knapp innerhalb der gewünschten Kante eines vorhandenen BühnenSnap-Podests. Das funktioniert in beiden Ansichten. Die Position vorhandener Podeste kannst du im Modellbaum ändern. Für ein anderes Modell setzt du das Podest mit dem gewünschten Plansymbol neu.
+**2D-Grundriss** zeigt die flachen Symbole auf Höhe der Podestoberkante. **3D-Modell** zeigt die Volumenkörper. Der Modus wird im Plan gespeichert. Autosnap funktioniert in beiden Ansichten; die Zielkanten müssen parallel zu den X-/Y-Achsen des Plans liegen.
 
-**Drehung** stellt jedes neue Podest im Grundriss **0° hochkant** oder **90° quer**. Das gilt für Startpodeste und für Autosnap. Der Klick wählt die nächstgelegene Zielkante und das nähere Ende dieser Kante. Dort liegen die Ecken bündig, auch wenn eine Platte übersteht. Ist die Position durch ein anderes Podest belegt, probiert Autosnap das andere Ende derselben Kante. Sind beide Positionen belegt, erscheint eine Meldung und der Plan wird nicht geändert.
+## Eine FCStd-Datei pro Symbol
 
-Autosnap setzt voraus, dass die Kanten des Zielpodests parallel zu den X- und Y-Achsen des Plans verlaufen.
+Unter `freecad/buehnensnap/resources/models/<System>/<Symbol>/` liegt pro Symbol genau **eine .FCStd-Datei**. Dateiname und Groß-/Kleinschreibung der Endung sind beliebig. Das Dropdown zeigt die Symbolordner des gewählten Systems; bekannte Kataloggrößen werden als Maß angezeigt. Mehrere FCStd-Dateien im selben Symbolordner führen zu einer Warnung; der Ordner wird übersprungen. STEP-Dateien werden nicht mehr als Bibliotheksmodelle verwendet.
 
-## STEP-Modelle hinzufügen oder austauschen
+Die FCStd-Datei enthält zwei getrennte Geometrieobjekte:
 
-Unter `freecad/buehnensnap/resources/models/` hat jedes Podestsystem einen eigenen Unterordner. Darin liegt **für jedes Symbol ein weiterer Ordner**. Jeder Symbolordner enthält **genau eine `.step`- oder `.stp`-Datei für 3D und eine `.FCStd`-Datei für 2D**. Dateinamen und Groß-/Kleinschreibung der Endungen sind frei wählbar; ein Suffix ist nicht nötig. Die Auswahl **Plansymbol** zeigt die Symbolordner des gewählten Systems. Bekannte Kataloggrößen werden weiter als Maß angezeigt.
+| Objektname oder eindeutige Bezeichnung | Inhalt |
+| --- | --- |
+| `Symbol3D` | Fertiger Volumenkörper oder Compound mehrerer Volumenkörper; auch der fertige Body ist möglich |
+| `Symbol2D` | Skizze, Linien oder flache Part-Geometrie parallel zur XY-Ebene |
 
-Beispiel:
+Die Sichtbarkeit dieser Objekte in der Quelldatei ist für den Import unerheblich. Hilfsgeometrie und weitere Konstruktionsobjekte werden nicht separat eingelesen. Beide Varianten müssen als Objekt mit fertiger `Shape` vorliegen; eine reine Dokumentgruppe reicht nicht. Für mehrere Körper eignet sich ein Part-Compound.
 
-| Symbolordner relativ zu `resources/models/` | 3D-Datei | 2D-Datei |
-| --- | --- | --- |
-| `buetec-standard/2000x1000/` | `2000x1000.step` | `2000x1000.FCStd` |
-| `buetec-standard/Mein Podest/` | `Koerper.step` | `Grundriss.FCStd` |
+Beispiel: `buetec-standard/2000x1000/2000x1000.FCStd` enthält `Symbol3D` und `Symbol2D`.
 
-Lege für ein neues Symbol einen Ordner mit den beiden Dateien an und öffne BühnenSnap erneut. Bei zusätzlichen Symbolen übernimmt EventCAD die Maße aus den äußeren Abmessungen des STEP-Modells in X, Y und Z. **Planungsmaß → Eigenes Maß** erzeugt einen Quader passend zu den eingegebenen Maßen. Ordner ohne STEP-Datei werden nicht angeboten. Ordner mit mehreren STEP-Dateien werden mit einer Warnung übersprungen.
+## Modelle bearbeiten oder austauschen
 
-1. Öffne in FreeCAD **Ansicht → Bedienfelder → Python-Konsole** und gib `print(App.getUserAppDataDir())` ein. Öffne im Explorer den ausgegebenen Ordner und darunter `Mod`, deinen EventCAD-Ordner und `freecad/buehnensnap/resources/models/`.
-2. Suche das Modell im Unterordner des Systems. Für **BÜTEC Standard, 2 × 1 m** ist das `buetec-standard/2000x1000/2000x1000.step`. Sichere die Originaldatei, bevor du sie ersetzt.
-3. Öffne die STEP-Datei als Ausgangspunkt in FreeCAD oder erstelle ein eigenes Modell. Richte das Modell so aus, dass die Plattenlänge in X, die Breite in Y und die Höhe in Z verläuft. Der gesamte Körper muss in X × Y das Katalogmaß haben. Die Trittfläche muss am höchsten Punkt liegen. Steckbeine können nach unten reichen. EventCAD setzt die Oberkante beim Platzieren automatisch auf die eingestellte Z-Höhe.
-4. Wähle im Modellbaum die fertigen Volumenkörper aus. Exportiere sie über **Datei → Exportieren** als **STEP**. Speichere deine bearbeitbare 3D-Konstruktion bei Bedarf als `.FCStd` **außerhalb des Symbolordners**; dessen eine FCStd-Datei ist für das 2D-Symbol vorgesehen.
-5. Ersetze die STEP-Datei im zugehörigen Symbolordner. Lass dort genau eine STEP-Datei liegen; sie darf auch anders heißen. Setze in EventCAD ein neues Podest derselben Größe und prüfe es über **3D-Modell**. EventCAD liest die Datei beim Platzieren ein. Bei einem falschen Maß oder einer ungültigen Datei erscheint eine Meldung im BühnenSnap-Bedienfeld.
+1. Öffne die FCStd-Datei im jeweiligen Symbolordner.
+2. Bearbeite das 3D-Modell oder ersetze es durch deine Originalkonstruktion. Benenne das fertige Objekt im Modellbaum eindeutig **Symbol3D**. Bei den mitgelieferten Dateien sind die internen Objektnamen bereits entsprechend gesetzt.
+3. Erstelle oder bearbeite das flache Objekt und benenne es eindeutig **Symbol2D**. Zeichne 1:1 in Millimetern, parallel zur XY-Ebene. Eine TechDraw-Seite ist keine Symbolgeometrie.
+4. Richte Länge in X, Breite in Y und Höhe in Z aus. Die 2D-Grundfläche muss den X-/Y-Abmessungen des 3D-Modells entsprechen. Bei Katalogmodellen muss das Modell das Katalogmaß einhalten. Der höchste Punkt des 3D-Modells gilt als Oberkante; Füße dürfen nach unten reichen. Beide Varianten werden am minimalen X/Y ausgerichtet, das 2D-Symbol auf Oberkantenhöhe gesetzt.
+5. Speichere die Datei. Belasse genau eine FCStd-Datei im Symbolordner. Speichere Sicherungskopien mit Endung .FCStd außerhalb dieses Ordners.
+6. Öffne BühnenSnap erneut, um zusätzliche Symbolordner einzulesen. Platziere das bearbeitete Symbol neu. Für zusätzliche Modelle werden die Planungsmaße aus der 3D-Geometrie ermittelt.
 
-Die Geometrie wird in der Plandatei gespeichert. Für bereits platzierte Podeste kannst du das neue Modell übernehmen, indem du sie neu setzt. Grundriss, Autosnap und Kollisionsprüfung verwenden die beim Platzieren gesetzten Maße. Die Darstellung verwendet die EventCAD-Farben.
+Die mitgelieferten 3D-Objekte wurden vorläufig aus den bisherigen STEP-Dateien übernommen. Sie sind statische Part-Geometrien ohne ursprüngliche Konstruktionshistorie. Die Originalkonstruktion kann später in derselben FCStd-Datei ergänzt werden.
 
-## Eigene 2D-Symbole
+## Wiederverwendung in großen Plänen
 
-Verwende **FreeCAD-Dateien (`.FCStd`)** für die 2D-Varianten. So bleiben Skizzen und flache Part-Geometrie direkt in FreeCAD bearbeitbar und maßhaltig. Ein Body oder eine Extrusion ist nicht nötig. SVG wird von diesem Symbol-Lader nicht eingelesen.
+EventCAD speichert jede verwendete Kombination aus Modelldatei, Dateirevision und Planungsmaßen einmal als 2D-/3D-Vorlagenpaar im Plan. Die platzierten 3D-Podeste sind `App::Link`-Objekte. Die 2D-Symbole sind `App::LinkPython`-Objekte, deren Platzierung dem Podest folgt. Auch freie Planungsmaße verwenden gemeinsame Vorlagen.
 
-1. Öffne die FCStd-Datei eines vorhandenen Symbols oder erstelle ein neues FreeCAD-Dokument.
-2. Erstelle dein Symbol als sichtbare Skizze, Linien oder flache Part-Fläche parallel zur **XY-Ebene**. Konstruktionen auf einer TechDraw-Seite sind keine Symbolgeometrie. Blende Hilfsgeometrie aus, die nicht zum Symbol gehört.
-3. Zeichne **1:1 in Millimetern**. Die äußeren X- und Y-Abmessungen müssen zur Grundfläche des 3D-Modells passen; die Geometrie muss in einer gemeinsamen Ebene liegen. EventCAD richtet die minimale X-/Y-Koordinate an der Podestecke aus und setzt die Ebene auf die Oberkante des Podests. Drehe das 2D-Symbol nicht gegenüber der 3D-Grundfläche.
-4. Speichere das Dokument **im selben Symbolordner wie die STEP-Datei**. Der Dateiname ist beliebig; lass dort genau eine `.FCStd`-Datei liegen. Die mitgelieferten Symboldateien enthalten jeweils eine bearbeitbare Part-Ebene.
-5. Klicke in EventCAD auf **2D-Grundriss**, auch wenn dieser Modus bereits aktiv ist. Dabei werden geänderte Dateien erneut übernommen. Platzierung, Drehung und Autosnap richten sich weiterhin nach dem zugehörigen Podest.
+Die Vorlagen liegen unter **EventCAD · Symbolvorlagen** und bleiben ausgeblendet. Sie sind keine platzierten Podeste und werden nicht in Autosnap oder Kollisionsprüfung einbezogen. Änderungen an einer Quelldatei gelten für neue Platzierungen; bereits platzierte Symbole behalten ihre eingebettete Revision. Ein Wechsel zwischen 2D und 3D lädt diese Links nicht erneut von der Festplatte. Für eine geänderte Darstellung setzt du bestehende Podeste neu.
 
-Die Zuordnung erfolgt ausschließlich über den gemeinsamen Symbolordner. Beide Dateien dürfen unabhängig umbenannt werden. Am platzierten Podest steht **BühnenSnap → StageSnapModelFile** mit dem aktuellen STEP-Pfad relativ zum Modellordner. Verschiebst oder benennst du den Symbolordner selbst um, kannst du diesen Pfad dort anpassen. Bestehende Pläne mit den früheren flachen Modellpfaden werden auf die neue mitgelieferte Ordnerstruktur zugeordnet.
+Beide Geometrien und alle Links bleiben im Plan eingebettet. Der gespeicherte Plan lässt sich ohne die ursprünglichen Bibliotheksdateien öffnen. Vorlagen sollten im Plan nicht gelöscht oder manuell verschoben werden, solange Links auf sie verweisen.
 
-Die geladenen 2D-Geometrien werden im Plan eingebettet. Fehlt die FCStd-Datei, bleibt das gespeicherte Symbol erhalten; ohne gespeichertes Symbol wird der bisherige rechteckige Grundriss verwendet. Bei mehreren FCStd-Dateien oder einer defekten, räumlichen oder falsch dimensionierten Datei erscheint eine Warnung in der FreeCAD-Berichtsansicht und dieselbe Ersatzdarstellung wird verwendet. Geöffnete Quelldokumente werden beim Laden nicht verändert. Die FCStd-Dateien erscheinen nicht als zusätzliche 3D-Modelle im Dropdown.
+## Bestehende Pläne
 
-## Aufbau
+Podeste aus älteren EventCAD-Versionen bleiben auswählbar, andockbar und zwischen 2D/3D umschaltbar. Sie behalten ihre eingebettete Geometrie und werden nicht automatisch durch Links ersetzt. Neue Podeste verwenden die gemeinsame Vorlagenverwaltung. Alte STEP-Modellpfade werden beim Nachladen eines alten 2D-Symbols auf die FCStd-Datei desselben Symbolordners aufgelöst; frühere flache Katalogpfade werden ebenfalls unterstützt.
 
-Der Quellcode liegt in `freecad/buehnensnap/`. `decks.py` enthält Katalog, Podestkörper, Grundrisssymbole und die Autosnap-Platzierung. `plan_symbols.py` sucht und lädt die 2D-Begleitdateien. `view_modes.py` verwaltet die Darstellung pro Dokument. `init_gui.py` registriert den Event-Arbeitsbereich mit seiner Werkzeugleiste.
+Fehlt bei einem alten Plan die Quelldatei oder ist sie ungültig, bleibt der eingebettete Grundriss erhalten; ohne eingebetteten Grundriss wird ein Rechteck verwendet. Neue Bibliothekssymbole benötigen gültige 2D- und 3D-Objekte; fehlerhafte Dateien werden beim Platzieren mit einer Fehlermeldung zurückgewiesen.
+
+## Entwicklung und Prüfung
+
+`decks.py` verwaltet Katalog, Vorlagen, Links und Autosnap. `plan_symbols.py` lädt die Varianten einer FCStd-Datei revisionsabhängig, ohne offene Originaldokumente zu verändern. `view_modes.py` steuert die Sichtbarkeit. `panel.py` stellt die Bedienoberfläche bereit.
+
+Mit FreeCADs Python-Bibliotheken: `python -m unittest discover -s tests -v`. Falls bereits ein anderes EventCAD installiert ist, muss zum Testen dieses Checkouts dessen Pfad im Python-Namensraum `freecad` Vorrang haben; bereits geladene `freecad.buehnensnap`-Module müssen entfernt werden.
+

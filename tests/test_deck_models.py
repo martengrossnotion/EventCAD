@@ -11,6 +11,16 @@ import Part
 from freecad.buehnensnap import decks
 
 
+def save_model(shape, path):
+    document = App.newDocument("TestSymbolFile")
+    document.addObject("Part::Feature", "Symbol3D").Shape = shape
+    bounds = shape.BoundBox
+    document.addObject("Part::Feature", "Symbol2D").Shape = Part.makePlane(bounds.XLength, bounds.YLength)
+    document.recompute()
+    document.saveAs(str(path))
+    App.closeDocument(document.Name)
+
+
 class DeckModelTest(unittest.TestCase):
     deck = decks.CATALOG["BÜTEC Standard"][0]
 
@@ -54,10 +64,10 @@ class DeckModelTest(unittest.TestCase):
             folder.mkdir()
             (folder / ".gitkeep").touch()
             (folder / "Leerer Ordner").mkdir()
-            filename = "Kleines Podest.STP"
+            filename = "Kleines Podest.FCStd"
             symbol_folder = folder / "Kleines Podest"
             symbol_folder.mkdir()
-            Part.makeBox(735, 520, 44).exportStep(str(symbol_folder / filename))
+            save_model(Part.makeBox(735, 520, 44), symbol_folder / filename)
             entries = list(decks.plan_symbol_models("buetec-eco", "BÜTEC Eco"))
             self.assertEqual(entries, [("Kleines Podest", f"buetec-eco/Kleines Podest/{filename}")])
             self.assertEqual(list(decks.plan_symbol_models("buetec-standard", "BÜTEC Standard")), [])
@@ -69,15 +79,15 @@ class DeckModelTest(unittest.TestCase):
             directory = Path(temp)
             path = directory / self.deck.model_file
             path.parent.mkdir(parents=True)
-            Part.makeBox(*self.deck.dimensions).exportStep(str(path))
+            save_model(Part.makeBox(*self.deck.dimensions), path)
             with patch.object(decks, "MODELS_DIR", directory):
                 original = self.add_deck()
                 plate = Part.makeBox(*self.deck.dimensions, App.Vector(25, 50, 75))
                 leg = Part.makeBox(50, 50, 300, App.Vector(50, 75, -225))
-                Part.Compound([plate, leg]).exportStep(str(path))
+                save_model(Part.Compound([plate, leg]), path)
                 replacement = self.add_deck(3000)
 
-            self.assertEqual(original.TypeId, "Part::Feature")
+            self.assertEqual(original.TypeId, "App::Link")
             self.assertEqual(len(original.Shape.Solids), 1)
             self.assertEqual(len(replacement.Shape.Solids), 2)
             bounds = replacement.Shape.BoundBox
@@ -103,7 +113,7 @@ class DeckModelTest(unittest.TestCase):
             directory = Path(temp)
             path = directory / self.deck.model_file
             path.parent.mkdir(parents=True)
-            Part.makeBox(1000, 2000, 90).exportStep(str(path))
+            save_model(Part.makeBox(1000, 2000, 90), path)
             with patch.object(decks, "MODELS_DIR", directory):
                 with self.assertRaisesRegex(ValueError, "2000 × 1000 mm"):
                     self.add_deck()
@@ -122,3 +132,4 @@ class DeckModelTest(unittest.TestCase):
         self.assertEqual(side, "Rechts")
         self.assertAlmostEqual(new.Shape.BoundBox.XMin, 2000)
         self.assertAlmostEqual(new.Shape.BoundBox.ZMax, 90)
+

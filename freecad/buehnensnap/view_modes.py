@@ -41,7 +41,7 @@ def show_mode(document, view, mode):
         elif symbol is not None and plan_view:
             refresh_deck_symbol(symbol)
             symbol.touch()
-        if not plan_view:
+        if not plan_view and source.TypeId != "App::Link":
             set_deck_frame_color(source)
         source.ViewObject.Visibility = visible and not plan_view
         if symbol is not None:
@@ -55,3 +55,4 @@ def show_mode(document, view, mode):
         view.viewTop()
     else:
         view.viewIsometric()
+

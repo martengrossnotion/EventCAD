@@ -67,7 +67,17 @@ class PlanSymbolTest(unittest.TestCase):
 
     def add_symbol(self, quarter_turn=1):
         placement = decks.seed_placement(self.deck, 1234, 2345, 275, quarter_turn)
-        source = decks.insert_deck(self.document, self.deck, placement)
+        source = self.document.addObject("Part::Feature", "LegacyDeck")
+        source.Shape = Part.makeBox(*self.deck.dimensions)
+        source.Placement = placement
+        for name, value in zip(("Length", "Width", "Height"), self.deck.dimensions):
+            source.addProperty("App::PropertyLength", name)
+            setattr(source, name, value)
+        for name, value in (("StageSnapKind", decks.DECK_KIND),
+                            ("StageSnapCatalogId", self.deck.catalog_id),
+                            ("StageSnapModelFile", self.model_file)):
+            source.addProperty("App::PropertyString", name)
+            setattr(source, name, value)
         symbol = decks.make_deck_symbol(self.document, source)
         self.document.recompute()
         return source, symbol
@@ -97,10 +107,11 @@ class PlanSymbolTest(unittest.TestCase):
         entries = list(decks.plan_symbol_models("test-system", "Testsystem"))
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0][0], self.model_path.parent.name)
-        self.assertEqual(entries[0][1], self.model_file)
+        self.assertEqual(entries[0][1], self.symbol_path.relative_to(self.root).as_posix())
 
-    def test_ambiguous_step_folder_is_not_offered_in_the_dropdown(self):
-        self.model_path.with_name("Second.STP").write_bytes(self.model_path.read_bytes())
+    def test_ambiguous_fcstd_folder_is_not_offered_in_the_dropdown(self):
+        self.write_symbol()
+        self.symbol_path.with_name("Second.FCStd").write_bytes(self.symbol_path.read_bytes())
         self.assertEqual(list(decks.plan_symbol_models("test-system", "Testsystem")), [])
 
     def test_geometry_is_loaded_at_the_deck_top_with_both_rotations(self):
@@ -177,7 +188,7 @@ class PlanSymbolTest(unittest.TestCase):
         self.document.recompute()
         self.assertEqual(len(symbol.Shape.Edges), 6)
         self.assertEqual(source.StageSnapModelFile,
-                         renamed_model.relative_to(self.root).as_posix())
+                         renamed_companion.relative_to(self.root).as_posix())
         self.assertEqual(symbol.StageSnapPlanFile,
                          renamed_companion.relative_to(self.root).as_posix())
 
@@ -309,3 +320,4 @@ class PlanSymbolTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

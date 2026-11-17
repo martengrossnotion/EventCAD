@@ -7,7 +7,7 @@ from pathlib import Path
 import FreeCAD as App
 import Part
 
-from .plan_symbols import find_plan_symbol, load_plan_shape
+from .plan_symbols import find_plan_symbol, load_plan_shape, load_variant_shape, global_placement
 
 DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
@@ -20,7 +20,7 @@ MODEL_SYSTEMS = {
     "buetec-eco": "BÜTEC Eco",
     "planning": "Planungsmaß",
 }
-MODEL_EXTENSIONS = {".step", ".stp"}
+MODEL_EXTENSIONS = {".fcstd"}
 UP = App.Vector(0, 0, 1)
 PLAN_EDGES = (
     ("Rechts", 0, 1),
@@ -56,7 +56,7 @@ def system_decks(system_id, system_label, sizes):
     for length, width in sizes:
         size_label = plate_size_label(length, width)
         yield Deck(f"{system_id}-{length}-{width}", f"{system_label} · {size_label}",
-                   length, width, 90, f"{system_id}/{length}x{width}/{length}x{width}.step")
+                   length, width, 90, f"{system_id}/{length}x{width}/{length}x{width}.FCStd")
 
 
 CATALOG = {
@@ -69,7 +69,7 @@ CATALOG = {
         (2000, 500), (1500, 500), (1000, 500), (500, 500),
     ))),
     "Planungsmaß": (Deck("planning-1000-1000", "Planungsmaß · 1 × 1 m", 1000, 1000, 90,
-                         "planning/1000x1000/1000x1000.step"), None),
+                         "planning/1000x1000/1000x1000.FCStd"), None),
 }
 
 
@@ -119,12 +119,12 @@ def deck_for_model(system_label, model_file):
 
 
 def is_deck(obj):
-    return (obj is not None and obj.TypeId in ("Part::Box", "Part::Feature")
+    return (obj is not None and obj.TypeId in ("Part::Box", "Part::Feature", "App::Link")
             and getattr(obj, "StageSnapKind", None) == DECK_KIND)
 
 
 def is_deck_symbol(obj):
-    return (obj is not None and obj.TypeId == "Part::FeaturePython"
+    return (obj is not None and obj.TypeId in ("Part::FeaturePython", "App::LinkPython")
             and getattr(obj, "StageSnapKind", None) == DECK_SYMBOL_KIND)
 
 
@@ -190,13 +190,13 @@ def symbol_model(folder):
     matches = [path for path in folder.iterdir()
                if path.is_file() and path.suffix.lower() in MODEL_EXTENSIONS]
     if len(matches) > 1:
-        raise ValueError(f"Symbolordner {folder.name}: Es darf nur eine STEP-Datei "
+        raise ValueError(f"Symbolordner {folder.name}: Es darf nur eine FCStd-Datei "
                          "für die 3D-Darstellung enthalten sein.")
     return matches[0] if matches else None
 
 
 def current_model_file(source):
-    """Resolve the current STEP in the linked symbol folder, including old plans."""
+    """Resolve the current FCStd in the linked symbol folder, including old plans."""
     model_file = read_deck(source).model_file
     if not model_file:
         return None
@@ -214,7 +214,7 @@ def current_model_file(source):
     return model_file
 
 
-def refresh_deck_symbol(symbol):
+def refresh_legacy_deck_symbol(symbol):
     """Refresh from a matching companion, retaining embedded geometry if absent."""
     source = symbol.StageSnapSource
     deck = read_deck(source)
@@ -262,7 +262,7 @@ def set_deck_frame_color(deck):
         ]
 
 
-def make_deck_symbol(document, deck):
+def make_legacy_deck_symbol(document, deck):
     container = deck_area(deck) or deck.getParentGeoFeatureGroup()
     if container is None:
         symbol = document.addObject("Part::FeaturePython", "PodestGrundriss")
@@ -299,7 +299,7 @@ def read_deck(obj):
                 if deck.catalog_id == obj.StageSnapCatalogId:
                     model_file = deck.model_file
                     break
-        if not model_file and Path(obj.StageSnapCatalogId).suffix.lower() in MODEL_EXTENSIONS:
+        if not model_file and Path(obj.StageSnapCatalogId).suffix.lower() in MODEL_EXTENSIONS | {".step", ".stp"}:
             model_file = obj.StageSnapCatalogId
     return Deck(obj.StageSnapCatalogId, obj.Label, obj.Length.Value,
                 obj.Width.Value, obj.Height.Value, model_file or None)
@@ -366,15 +366,11 @@ def make_box(deck, placement):
 
 def read_model_shape(path):
     if not path.is_file():
-        raise ValueError(f"STEP-Modell fehlt: {path}")
-
+        raise ValueError(f"FCStd-Modell fehlt: {path}")
     try:
-        shape = Part.read(str(path))
-        if shape.isNull() or not shape.Solids or not shape.isValid():
-            raise ValueError("Die Datei muss gültige Volumenkörper enthalten.")
+        return load_variant_shape(path, "Symbol3D")
     except Exception as error:
-        raise ValueError(f"STEP-Modell konnte nicht geladen werden: {path}\n{error}") from error
-    return shape
+        raise ValueError(f"FCStd-Modell konnte nicht geladen werden: {path}\n{error}") from error
 
 
 def load_deck_model(deck):
@@ -382,7 +378,7 @@ def load_deck_model(deck):
     shape = read_model_shape(path)
     bounds = shape.BoundBox
     if abs(bounds.XLength - deck.length) > 0.1 or abs(bounds.YLength - deck.width) > 0.1:
-        raise ValueError(f"STEP-Modell {path.name}: Grundfläche muss in X × Y "
+        raise ValueError(f"FCStd-Modell {path.name}: Grundfläche muss in X × Y "
                          f"{deck.length:g} × {deck.width:g} mm messen. "
                          f"Gemessen: {bounds.XLength:g} × {bounds.YLength:g} mm.")
 
@@ -412,14 +408,14 @@ def check_clear(document, deck, placement):
     for obj in document.Objects:
         if not is_deck(obj):
             continue
-        other = make_box(read_deck(obj), obj.getGlobalPlacement())
+        other = make_box(read_deck(obj), global_placement(obj))
         if positive_bounds_overlap(bounds, other.BoundBox) and shape.common(other).Volume > 1e-4:
             raise DeckOverlapError(f"Das neue Podest überschneidet sich mit „{obj.Label}“.")
 
 
 def snap_deck(document, target, deck, world_pick, quarter_turn, *, plan_view=False):
     preferred, alternate, side = snap_placements(
-        read_deck(target), target.getGlobalPlacement(), deck, world_pick, quarter_turn,
+        read_deck(target), global_placement(target), deck, world_pick, quarter_turn,
     )
     try:
         obj = insert_deck(document, deck, preferred, plan_view=plan_view, target=target)
@@ -432,24 +428,22 @@ def snap_deck(document, target, deck, world_pick, quarter_turn, *, plan_view=Fal
 
 def insert_deck(document, deck, placement, *, plan_view=False, target=None):
     check_clear(document, deck, placement)
-    model = load_deck_model(deck) if deck.model_file else None
-    type_id = "Part::Feature" if model is not None else "Part::Box"
     document.openTransaction("Podest setzen")
     try:
-        if target is None:
-            obj = document.addObject(type_id, "Podest")
-        else:
+        template3d, template2d = symbol_templates(document, deck)
+        obj = document.addObject("App::Link", "Podest")
+        obj.setLink(template3d)
+        obj.LinkTransform = False
+        if target is not None:
             area = area_for_snap(document, target)
-            obj = area.newObject(type_id, "Podest")
+            area.addObject(obj)
             container = obj.getParentGeoFeatureGroup()
             if container is not None:
-                placement = container.getGlobalPlacement().inverse() * placement
+                placement = global_placement(container).inverse() * placement
         obj.Label = f"Podest {obj.Name.removeprefix('Podest') or '000'} · {deck.label}"
-        if model is not None:
-            obj.Shape = model
-            for name in ("Length", "Width", "Height"):
-                obj.addProperty("App::PropertyLength", name, "BühnenSnap")
-                obj.setEditorMode(name, 1)
+        for name in ("Length", "Width", "Height"):
+            obj.addProperty("App::PropertyLength", name, "BühnenSnap")
+            obj.setEditorMode(name, 1)
         obj.Length, obj.Width, obj.Height = deck.dimensions
         obj.Placement = placement
         for prop, value in (("StageSnapKind", DECK_KIND), ("StageSnapCatalogId", deck.catalog_id),
@@ -458,17 +452,119 @@ def insert_deck(document, deck, placement, *, plan_view=False, target=None):
             setattr(obj, prop, value)
             if prop != "StageSnapModelFile":
                 obj.setEditorMode(prop, 1)
+        obj.addProperty("App::PropertyLink", "StageSnapPlanTemplate", "BühnenSnap")
+        obj.StageSnapPlanTemplate = template2d
+        obj.setEditorMode("StageSnapPlanTemplate", 2)
+        symbol = make_deck_symbol(document, obj)
         if App.GuiUp:
-            obj.ViewObject.ShapeColor = (0.76, 0.63, 0.41)
-            obj.ViewObject.LineColor = (0.23, 0.19, 0.14)
-            symbol = make_deck_symbol(document, obj)
             obj.ViewObject.Visibility = not plan_view
             symbol.ViewObject.Visibility = plan_view
         document.recompute()
-        if App.GuiUp:
-            set_deck_frame_color(obj)
     except Exception:
         document.abortTransaction()
         raise
     document.commitTransaction()
     return obj
+
+
+def template_group(document):
+    for obj in document.Objects:
+        if getattr(obj, "StageSnapTemplateLibrary", False):
+            return obj
+    group = document.addObject("App::DocumentObjectGroup", "EventCADSymbolvorlagen")
+    group.Label = "EventCAD · Symbolvorlagen"
+    group.addProperty("App::PropertyBool", "StageSnapTemplateLibrary", "BühnenSnap")
+    group.StageSnapTemplateLibrary = True
+    group.setEditorMode("StageSnapTemplateLibrary", 2)
+    return group
+
+
+def symbol_templates(document, deck):
+    """Embed one immutable pair per file revision and planning dimensions."""
+    if deck.model_file:
+        path = MODELS_DIR / deck.model_file
+        stat = path.stat()
+        key = repr((str(path.resolve()), stat.st_mtime_ns, stat.st_size, deck.dimensions))
+    else:
+        key = repr(("custom", deck.dimensions))
+    templates = {getattr(obj, "StageSnapVariant", ""): obj for obj in document.Objects
+                 if obj.TypeId == "Part::Feature"
+                 and getattr(obj, "StageSnapTemplateKey", None) == key}
+    if "Symbol3D" in templates and "Symbol2D" in templates:
+        return templates["Symbol3D"], templates["Symbol2D"]
+    shape3d = load_deck_model(deck) if deck.model_file else Part.makeBox(*deck.dimensions)
+    if deck.model_file:
+        shape2d = load_plan_shape(path, deck.length, deck.width)
+    else:
+        shape2d = Part.makePlane(deck.length, deck.width)
+    shape2d.translate(App.Vector(0, 0, deck.depth))
+    # Freeze local transforms into the geometry; links own their placement.
+    shapes = {"Symbol3D": shape3d, "Symbol2D": Part.Compound([shape2d])}
+    group = template_group(document)
+    for variant, shape in shapes.items():
+        template = document.addObject("Part::Feature", "EventCAD" + variant)
+        template.Shape = shape
+        template.Label = f"{deck.label} · {variant}"
+        for prop, value in (("StageSnapTemplateKey", key), ("StageSnapVariant", variant)):
+            template.addProperty("App::PropertyString", prop, "BühnenSnap")
+            setattr(template, prop, value)
+            template.setEditorMode(prop, 2)
+        group.addObject(template)
+        if App.GuiUp:
+            template.ViewObject.ShapeColor = (0.76, 0.63, 0.41)
+            template.ViewObject.LineColor = (0.23, 0.19, 0.14)
+            if variant == "Symbol3D":
+                set_deck_frame_color(template)
+            template.ViewObject.Visibility = False
+        templates[variant] = template
+    return templates["Symbol3D"], templates["Symbol2D"]
+
+
+class LinkedPlanSymbol:
+    """Synchronize placement only; geometry stays shared in the linked template."""
+
+    def execute(self, symbol):
+        source = symbol.StageSnapSource
+        if source is not None:
+            parent = symbol.getParentGeoFeatureGroup()
+            placement = global_placement(source)
+            if parent is not None:
+                placement = global_placement(parent).inverse() * placement
+            if symbol.Placement != placement:
+                symbol.Placement = placement
+
+
+def make_deck_symbol(document, deck):
+    if deck.TypeId != "App::Link":
+        return make_legacy_deck_symbol(document, deck)
+    for obj in document.Objects:
+        if is_deck_symbol(obj) and obj.StageSnapSource == deck:
+            return obj
+    symbol = document.addObject("App::LinkPython", "PodestGrundriss")
+    symbol.setLink(deck.StageSnapPlanTemplate)
+    symbol.LinkTransform = False
+    symbol.Label = f"{deck.Label} · 2D"
+    symbol.addProperty("App::PropertyString", "StageSnapKind", "BühnenSnap")
+    symbol.StageSnapKind = DECK_SYMBOL_KIND
+    symbol.addProperty("App::PropertyLink", "StageSnapSource", "BühnenSnap")
+    symbol.StageSnapSource = deck
+    container = deck_area(deck) or deck.getParentGeoFeatureGroup()
+    if container is not None:
+        container.addObject(symbol)
+    symbol.Proxy = LinkedPlanSymbol()
+    symbol.Proxy.execute(symbol)
+    for name in ("StageSnapKind", "StageSnapSource", "Placement"):
+        symbol.setEditorMode(name, 1)
+    if App.GuiUp:
+        symbol.ViewObject.ShowInTree = False
+        symbol.ViewObject.Visibility = False
+    return symbol
+
+
+def refresh_deck_symbol(symbol):
+    # Linked pairs are immutable snapshots; replaced files affect new placements.
+    # The old per-instance proxy remains supported for previously saved plans.
+    if symbol.TypeId == "App::LinkPython":
+        symbol.Proxy.execute(symbol)
+    else:
+        refresh_legacy_deck_symbol(symbol)
