@@ -20,7 +20,7 @@ Verwendung
 
 Wähle in der Event-Werkzeugleiste „2D-Grundriss“ für flache, anklickbare
 Podestsymbole oder „3D-Modell“ für die Körper in isometrischer Ansicht.
-Wähle „Podestsystem“ und „Plattenmaß“ und klicke auf „Podest an
+Wähle „Podestsystem“ und „Plansymbol“ und klicke auf „Podest an
 Koordinaten setzen“. Freie Maße findest du unter „Planungsmaß > Eigenes Maß“.
 „Drehung“ setzt neue Podeste im Grundriss bei 0° hochkant und bei 90° quer.
 Aktiviere „Autosnap starten“ und klicke knapp innerhalb der gewünschten
@@ -32,4 +32,4 @@ Bestehende BühnenSnap-Pläne kannst du direkt öffnen und weiterbearbeiten.
 Beim Wechsel in einen anderen Arbeitsbereich endet Autosnap.
 Das Add-on verwendet die mit FreeCAD gelieferten Bibliotheken.
 
-Die Anleitung zum Austausch der STEP-Modelle findest du in README.md.
+Die Anleitung zum Hinzufügen und Austauschen von STEP-Modellen steht in README.md.

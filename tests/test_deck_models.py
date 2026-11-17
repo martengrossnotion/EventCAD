@@ -33,6 +33,35 @@ class DeckModelTest(unittest.TestCase):
                     self.assertIsNotNone(deck.model_file)
                     self.assertAlmostEqual(decks.load_deck_model(deck).BoundBox.ZMax, deck.depth)
 
+    def test_uploaded_buetec_model_has_its_own_plan_symbol_and_uses_real_dimensions(self):
+        filename = "Buetec_standard_1x2m-Buetec_standard_1x2m.step"
+        entries = dict(decks.plan_symbol_models("buetec-standard", "BÜTEC Standard"))
+        self.assertIn("2 × 1 m", entries)
+        model = decks.deck_for_model("BÜTEC Standard", entries[filename])
+        for actual, expected in zip(model.dimensions, (1000, 2000, 90)):
+            self.assertAlmostEqual(actual, expected)
+
+        target = self.add_deck()
+        placement = target.Placement.multVec(App.Vector(1950, 700, 90))
+        obj, side = decks.snap_deck(self.document, target, model, placement, 1)
+        self.assertEqual(side, "Rechts")
+        self.assertEqual(len(obj.Shape.Solids), 6)
+        self.assertAlmostEqual(obj.Shape.BoundBox.XMin, target.Shape.BoundBox.XMax)
+
+    def test_additional_models_are_discovered_only_in_the_selected_system(self):
+        with TemporaryDirectory() as temp, patch.object(decks, "MODELS_DIR", Path(temp)):
+            folder = Path(temp) / "buetec-eco"
+            folder.mkdir()
+            (folder / ".gitkeep").touch()
+            (folder / "Unterordner.step").mkdir()
+            filename = "Kleines Podest.STP"
+            Part.makeBox(735, 520, 44).exportStep(str(folder / filename))
+            entries = list(decks.plan_symbol_models("buetec-eco", "BÜTEC Eco"))
+            self.assertEqual(entries, [(filename, f"buetec-eco/{filename}")])
+            self.assertEqual(list(decks.plan_symbol_models("buetec-standard", "BÜTEC Standard")), [])
+            model = decks.deck_for_model("BÜTEC Eco", entries[0][1])
+            self.assertEqual(model.dimensions, (735, 520, 44))
+
     def test_replacing_the_file_affects_new_placements_and_embeds_the_shape(self):
         with TemporaryDirectory() as temp:
             directory = Path(temp)

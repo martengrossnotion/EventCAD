@@ -34,6 +34,8 @@ class PodestCommand:
             window = Gui.getMainWindow()
             self.panel = StageSnapDock(window)
             window.addDockWidget(QtCore.Qt.RightDockWidgetArea, self.panel)
+        else:
+            self.panel.refresh_models()
         self.panel.show()
         self.panel.raise_()
 

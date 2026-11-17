@@ -5,7 +5,8 @@ from pivy import coin
 from PySide import QtCore, QtWidgets
 
 from .decks import (
-    CATALOG, Deck, deck_from_pick, insert_deck, is_deck, plate_size_label, seed_placement, snap_deck,
+    Deck, deck_for_model, deck_from_pick, insert_deck, is_deck, model_systems, plan_symbol_models,
+    seed_placement, snap_deck,
 )
 from .view_modes import active_3d_view, is_plan_view
 
@@ -19,6 +20,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
         self.mouse_handle = None
         self.document_name = None
         self.pending = None
+        self.selected_deck = None
+        self.model_error = None
         self.mouse_type = coin.SoMouseButtonEvent.getClassTypeId()
         self.monitor = QtCore.QTimer(self)
         self.monitor.setInterval(200)
@@ -27,7 +30,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
         panel = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(panel)
         intro = QtWidgets.QLabel(
-            "Podestsystem und Plattenmaß wählen. Für Autosnap knapp innerhalb der gewünschten "
+            "Podestsystem und Plansymbol wählen. Für Autosnap knapp innerhalb der gewünschten "
             "Kante eines vorhandenen BühnenSnap-Podests klicken."
         )
         intro.setWordWrap(True)
@@ -36,10 +39,9 @@ class StageSnapDock(QtWidgets.QDockWidget):
         library = QtWidgets.QGroupBox("Podestbibliothek")
         form = QtWidgets.QFormLayout(library)
         self.system = QtWidgets.QComboBox()
-        self.system.addItems(list(CATALOG))
         form.addRow("Podestsystem", self.system)
-        self.plate_size = QtWidgets.QComboBox()
-        form.addRow("Plattenmaß", self.plate_size)
+        self.plan_symbol = QtWidgets.QComboBox()
+        form.addRow("Plansymbol", self.plan_symbol)
         self.length = self.number_field(1, 100000, 2000)
         self.width = self.number_field(1, 100000, 1000)
         self.depth = self.number_field(1, 10000, 90)
@@ -50,9 +52,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
         self.rotation.addItems(["0° Hochkant", "90° Quer"])
         self.rotation.setToolTip("Ausrichtung neuer Podeste im Grundriss, auch beim Andocken.")
         form.addRow("Drehung", self.rotation)
-        self.system.currentTextChanged.connect(self.update_plate_sizes)
-        self.plate_size.currentIndexChanged.connect(self.update_dimensions)
-        self.update_plate_sizes(self.system.currentText())
+        self.system.currentIndexChanged.connect(self.update_plan_symbols)
+        self.plan_symbol.currentIndexChanged.connect(self.update_dimensions)
         layout.addWidget(library)
 
         start = QtWidgets.QGroupBox("Startpodest oder separate Fläche")
@@ -86,6 +87,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
         scroll.setWidget(panel)
         self.setWidget(scroll)
         self.visibilityChanged.connect(self.stop_when_hidden)
+        self.refresh_models()
 
     @staticmethod
     def number_field(minimum, maximum, value):
@@ -96,27 +98,61 @@ class StageSnapDock(QtWidgets.QDockWidget):
         field.setSuffix(" mm")
         return field
 
-    def update_plate_sizes(self, system):
-        self.plate_size.blockSignals(True)
-        self.plate_size.clear()
-        for deck in CATALOG[system]:
-            label = "Eigenes Maß" if deck is None else plate_size_label(deck.length, deck.width)
-            self.plate_size.addItem(label, deck)
-        self.plate_size.blockSignals(False)
+    def refresh_models(self):
+        selected_system = self.system.currentData()
+        self.system.blockSignals(True)
+        self.system.clear()
+        for system_id, label in model_systems().items():
+            self.system.addItem(label, system_id)
+        self.system.setCurrentIndex(max(0, self.system.findData(selected_system)))
+        self.system.blockSignals(False)
+        self.update_plan_symbols()
+
+    def update_plan_symbols(self):
+        system_id = self.system.currentData()
+        selected_model = self.plan_symbol.currentData()
+        had_selection = self.plan_symbol.currentIndex() >= 0
+        self.plan_symbol.blockSignals(True)
+        self.plan_symbol.clear()
+        for label, model_file in plan_symbol_models(system_id, self.system.currentText()):
+            self.plan_symbol.addItem(label, model_file)
+            self.plan_symbol.setItemData(self.plan_symbol.count() - 1, model_file, QtCore.Qt.ToolTipRole)
+        if system_id == "planning":
+            self.plan_symbol.addItem("Eigenes Maß")
+        if had_selection and self.plan_symbol.count():
+            self.plan_symbol.setCurrentIndex(max(0, self.plan_symbol.findData(selected_model)))
+        self.plan_symbol.setEnabled(bool(self.plan_symbol.count()))
+        self.plan_symbol.blockSignals(False)
         self.update_dimensions()
 
     def update_dimensions(self):
-        deck = self.plate_size.currentData()
+        if self.model_error and self.status.text() == self.model_error:
+            self.status.clear()
+        self.selected_deck = None
+        self.model_error = None
+        model_file = self.plan_symbol.currentData()
+        if model_file is not None:
+            try:
+                self.selected_deck = deck_for_model(self.system.currentText(), model_file)
+            except ValueError as error:
+                self.model_error = str(error)
+        elif self.plan_symbol.currentIndex() < 0:
+            self.model_error = "Für dieses Podestsystem wurden keine STEP-Modelle gefunden."
+        if self.model_error:
+            self.status.setText(self.model_error)
+
         fields = (self.length, self.width, self.depth)
-        for index, field in enumerate(fields):
-            if deck is not None:
-                field.setValue(deck.dimensions[index])
-            field.setEnabled(deck is None)
+        if self.selected_deck is not None:
+            for field, value in zip(fields, self.selected_deck.dimensions):
+                field.setValue(value)
+        for field in fields:
+            field.setEnabled(model_file is None and self.model_error is None)
 
     def current_deck(self):
-        deck = self.plate_size.currentData()
-        if deck is not None:
-            return deck
+        if self.model_error:
+            raise ValueError(self.model_error)
+        if self.selected_deck is not None:
+            return self.selected_deck
         length, width, depth = self.length.value(), self.width.value(), self.depth.value()
         return Deck("custom", f"{length:g} × {width:g} mm", length, width, depth)
 
@@ -131,9 +167,9 @@ class StageSnapDock(QtWidgets.QDockWidget):
 
     def add_seed(self):
         try:
+            deck = self.current_deck()
             document = App.ActiveDocument or App.newDocument("Buehnenplan")
             first_object = not document.Objects
-            deck = self.current_deck()
             placement = seed_placement(deck, self.x.value(), self.y.value(), self.z.value(),
                                        self.rotation.currentIndex())
             obj = insert_deck(document, deck, placement, plan_view=is_plan_view(document))

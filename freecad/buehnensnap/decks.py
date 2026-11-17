@@ -12,6 +12,13 @@ DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
 AREA_NUMBER_KEY = "EventCADLastDeckArea"
 FRAME_GRAY = 128 / 255
 MODELS_DIR = Path(__file__).resolve().parent / "resources" / "models"
+MODEL_SYSTEMS = {
+    "buetec-standard": "BÜTEC Standard",
+    "nivtec-standard": "nivtec Standard",
+    "buetec-eco": "BÜTEC Eco",
+    "planning": "Planungsmaß",
+}
+MODEL_EXTENSIONS = {".step", ".stp"}
 UP = App.Vector(0, 0, 1)
 PLAN_EDGES = (
     ("Rechts", 0, 1),
@@ -62,6 +69,40 @@ CATALOG = {
     "Planungsmaß": (Deck("planning-1000-1000", "Planungsmaß · 1 × 1 m", 1000, 1000, 90,
                          "planning/1000x1000.step"), None),
 }
+
+
+def model_systems():
+    systems = MODEL_SYSTEMS.copy()
+    if MODELS_DIR.is_dir():
+        for folder in sorted(MODELS_DIR.iterdir(), key=lambda path: path.name.casefold()):
+            if folder.is_dir() and not folder.name.startswith("."):
+                systems.setdefault(folder.name, folder.name)
+    return systems
+
+
+def plan_symbol_models(system_id, system_label):
+    folder = MODELS_DIR / system_id
+    if not folder.is_dir():
+        return
+    files = {path.relative_to(MODELS_DIR).as_posix(): path.name for path in folder.iterdir()
+             if path.suffix.lower() in MODEL_EXTENSIONS and path.is_file()}
+    for deck in filter(None, CATALOG.get(system_label, ())):
+        if deck.model_file in files:
+            yield plate_size_label(deck.length, deck.width), deck.model_file
+            del files[deck.model_file]
+    for model_file in sorted(files, key=lambda name: (name.casefold(), name)):
+        yield files[model_file], model_file
+
+
+def deck_for_model(system_label, model_file):
+    for deck in filter(None, CATALOG.get(system_label, ())):
+        if deck.model_file == model_file:
+            return deck
+
+    path = MODELS_DIR / model_file
+    bounds = read_model_shape(path).BoundBox
+    return Deck(model_file, f"{system_label} · {path.stem}",
+                bounds.XLength, bounds.YLength, bounds.ZLength, model_file)
 
 
 def is_deck(obj):
@@ -239,8 +280,7 @@ def make_box(deck, placement):
     return shape
 
 
-def load_deck_model(deck):
-    path = MODELS_DIR / deck.model_file
+def read_model_shape(path):
     if not path.is_file():
         raise ValueError(f"STEP-Modell fehlt: {path}")
 
@@ -250,7 +290,12 @@ def load_deck_model(deck):
             raise ValueError("Die Datei muss gültige Volumenkörper enthalten.")
     except Exception as error:
         raise ValueError(f"STEP-Modell konnte nicht geladen werden: {path}\n{error}") from error
+    return shape
 
+
+def load_deck_model(deck):
+    path = MODELS_DIR / deck.model_file
+    shape = read_model_shape(path)
     bounds = shape.BoundBox
     if abs(bounds.XLength - deck.length) > 0.1 or abs(bounds.YLength - deck.width) > 0.1:
         raise ValueError(f"STEP-Modell {path.name}: Grundfläche muss in X × Y "
