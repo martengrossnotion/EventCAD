@@ -1,4 +1,4 @@
-EventCAD 1.9.0 – Event-Arbeitsbereich für FreeCAD
+EventCAD 2.0.0 – Event-Arbeitsbereich für FreeCAD
 
 Voraussetzung: FreeCAD 1.0 oder neuer.
 
@@ -20,13 +20,12 @@ FCStd-Datei. Sie enthält die getrennten Geometrieobjekte Symbol3D und
 Symbol2D. STEP-Dateien werden nicht mehr als Bibliotheksmodelle geladen.
 Die vorhandenen STEP-Geometrien wurden in echte FCStd-Dateien übernommen.
 
-Gleiche Symbole verwenden gemeinsame, im Plan eingebettete Vorlagen und
-App::Link-Instanzen. Bereits platzierte Objekte behalten ihre Dateirevision.
-Jedes neue Podest hat genau ein Platzierungsobjekt. Beim Wechsel zwischen
-2D und 3D wird dessen Geometrievorlage umgeschaltet; Position, Drehung und
-Sichtbarkeit bleiben erhalten. Du kannst in beiden Ansichten verschieben.
-Links aus Version 1.7 werden beim Ansichtswechsel entsprechend umgestellt.
-Alte Pläne bleiben verwendbar; neue Platzierungen nutzen die Link-Verwaltung.
+Neue Podeste erhalten die Struktur Podestfläche > Views und Podestsegment.
+Views enthält ViewDecks, ViewCorners und ViewFrames als Sichtbarkeitssteuerungen.
+Jedes Segment enthält Corners (CornerTL/TR/BL/BR), Frame (PedestalFrame) und
+Deck (PedestalDeck). Nur das gesamte Segment wird positioniert und gedreht.
+Bauteile verwenden gemeinsame native Links auf eingebettete Vorlagen.
+2D/3D-Wechsel, Kategorienfilter und manuelle Ausblendung bleiben getrennt.
+Alte Podeste bleiben erhalten; neu platzierte Podeste nutzen die neue Struktur.
 
 Details zu Modellaufbau, Austausch und Bedienung stehen in README.md.
-

@@ -35,6 +35,9 @@ def show_mode(document, view, mode):
         if not is_deck(source):
             continue
         symbol = symbols.get(source.Name)
+        if getattr(source, 'StageSnapSegment', False):
+            set_deck_mode(source, plan_view)
+            continue
         if source.TypeId == "App::Link":
             if "StageSnap3DTemplate" not in source.PropertiesList:
                 # Recover the visible state from the old pair once. Later

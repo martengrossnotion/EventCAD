@@ -121,7 +121,7 @@ def deck_for_model(system_label, model_file):
 
 
 def is_deck(obj):
-    return (obj is not None and obj.TypeId in ("Part::Box", "Part::Feature", "App::Link")
+    return (obj is not None and obj.TypeId in ("Part::Box", "Part::Feature", "App::Link", "App::Part")
             and getattr(obj, "StageSnapKind", None) == DECK_KIND)
 
 
@@ -131,12 +131,18 @@ def is_deck_symbol(obj):
 
 
 def deck_from_pick(obj):
+    from .segments import segment_from_pick
+    segment = segment_from_pick(obj)
+    if segment is not None:
+        return segment
     if is_deck_symbol(obj):
         obj = obj.StageSnapSource
     return obj if is_deck(obj) else None
 
 
 def deck_area(deck):
+    if getattr(deck, 'StageSnapSegment', False):
+        return deck.StageSnapArea
     parent = deck.getParentGroup()
     return parent if getattr(parent, "StageSnapAreaNumber", 0) > 0 else None
 
@@ -432,35 +438,8 @@ def insert_deck(document, deck, placement, *, plan_view=False, target=None):
     check_clear(document, deck, placement)
     document.openTransaction("Podest setzen")
     try:
-        template3d, template2d = symbol_templates(document, deck)
-        obj = document.addObject("App::Link", "Podest")
-        obj.setLink(template3d)
-        obj.LinkTransform = False
-        if target is not None:
-            area = area_for_snap(document, target)
-            area.addObject(obj)
-            container = obj.getParentGeoFeatureGroup()
-            if container is not None:
-                placement = global_placement(container).inverse() * placement
-        obj.Label = f"Podest {obj.Name.removeprefix('Podest') or '000'} · {deck.label}"
-        for name in ("Length", "Width", "Height"):
-            obj.addProperty("App::PropertyLength", name, "Podest")
-            obj.setEditorMode(name, 1)
-        obj.Length, obj.Width, obj.Height = deck.dimensions
-        obj.Placement = placement
-        for prop, value in (("StageSnapKind", DECK_KIND), ("StageSnapCatalogId", deck.catalog_id),
-                            ("StageSnapModelFile", deck.model_file or "")):
-            obj.addProperty("App::PropertyString", prop, "Podest")
-            setattr(obj, prop, value)
-            if prop != "StageSnapModelFile":
-                obj.setEditorMode(prop, 1)
-        obj.addProperty("App::PropertyLink", "StageSnapPlanTemplate", "Podest")
-        obj.StageSnapPlanTemplate = template2d
-        obj.setEditorMode("StageSnapPlanTemplate", 2)
-        obj.addProperty("App::PropertyLink", "StageSnap3DTemplate", "Podest")
-        obj.StageSnap3DTemplate = template3d
-        obj.setEditorMode("StageSnap3DTemplate", 2)
-        set_deck_mode(obj, plan_view)
+        from .segments import create_segment
+        obj = create_segment(document, deck, placement, plan_view=plan_view, target=target)
         document.recompute()
     except Exception:
         document.abortTransaction()
@@ -540,6 +519,8 @@ class LinkedPlanSymbol:
 
 def make_deck_symbol(document, deck):
     """Legacy entry point: native links now own both representations."""
+    if getattr(deck, 'StageSnapSegment', False):
+        return deck
     if deck.TypeId == "App::Link":
         return deck
     return make_legacy_deck_symbol(document, deck)
@@ -552,6 +533,10 @@ def set_deck_mode(source, plan_view):
     when their library file is absent. Placement and visibility belong to the
     instance, never to its currently selected representation.
     """
+    if getattr(source, 'StageSnapSegment', False):
+        from .segments import set_segment_mode
+        set_segment_mode(source, plan_view)
+        return
     if source.TypeId != "App::Link":
         raise ValueError("Die gemeinsame Darstellung benötigt ein App::Link-Podest.")
     if "StageSnap3DTemplate" not in source.PropertiesList:

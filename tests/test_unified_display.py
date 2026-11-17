@@ -5,6 +5,7 @@ from tempfile import TemporaryDirectory
 import unittest
 
 import FreeCAD as App
+from freecad.buehnensnap.segments import components, segment_shape
 import Part
 
 from freecad.buehnensnap import decks
@@ -45,26 +46,27 @@ class UnifiedDisplayTest(unittest.TestCase):
             self.mode(source, plan_view)
             self.assertIs(self.document.getObject(original), source)
             self.assertEqual([obj.Name for obj in self.document.Objects], original_objects)
-            self.assertEqual(source.TypeId, "App::Link")
-            self.assertEqual(source.LinkedObject, source.StageSnapPlanTemplate if plan_view
-                             else source.StageSnap3DTemplate)
+            self.assertEqual(source.TypeId, "App::Part")
+            for child in components(source):
+                self.assertEqual(child.LinkedObject, child.StageSnapPlanTemplate if plan_view
+                                 else child.StageSnap3DTemplate)
             self.assert_placement(source.Placement, placement)
-            self.assertEqual(bool(source.Shape.Solids), not plan_view)
+            self.assertEqual(bool(segment_shape(source).Solids), not plan_view)
             self.assertFalse(any(decks.is_deck_symbol(obj) for obj in self.document.Objects))
             self.assertFalse(any(obj.TypeId == "App::LinkPython" for obj in self.document.Objects))
 
     def test_moving_and_rotating_in_2d_survives_3d_and_back(self):
         source = self.insert(plan_view=True)
-        self.assertFalse(source.Shape.Solids)
+        self.assertFalse(segment_shape(source).Solids)
         moved = App.Placement(App.Vector(4200, -725, 610),
                               App.Rotation(App.Vector(0, 0, 1), 90))
         source.Placement = moved
         self.document.recompute()
-        plan_bounds = source.Shape.BoundBox
+        plan_bounds = segment_shape(source).BoundBox
         for plan_view in (False, True):
             self.mode(source, plan_view)
             self.assert_placement(source.Placement, moved)
-            bounds = source.Shape.BoundBox
+            bounds = segment_shape(source).BoundBox
             for attr in ("XMin", "XMax", "YMin", "YMax", "ZMax"):
                 self.assertAlmostEqual(getattr(bounds, attr), getattr(plan_bounds, attr))
             self.assertEqual(decks.deck_from_pick(source), source)
@@ -85,13 +87,13 @@ class UnifiedDisplayTest(unittest.TestCase):
         picked = source.Placement.multVec(App.Vector(790, 400, 90))
         placed, side = decks.snap_deck(self.document, source, self.deck, picked, 1,
                                        plan_view=True)
-        self.assertFalse(placed.Shape.Solids)
-        before = placed.Shape.BoundBox
+        self.assertFalse(segment_shape(placed).Solids)
+        before = segment_shape(placed).BoundBox
         self.mode(source, False)
         self.mode(placed, False)
         for attr in ("XMin", "XMax", "YMin", "YMax", "ZMax"):
-            self.assertAlmostEqual(getattr(placed.Shape.BoundBox, attr), getattr(before, attr))
-        self.assertGreater(len(placed.Shape.Solids), 0)
+            self.assertAlmostEqual(getattr(segment_shape(placed).BoundBox, attr), getattr(before, attr))
+        self.assertGreater(len(segment_shape(placed).Solids), 0)
 
     def test_transformed_parent_and_local_edit_survive_mode_changes(self):
         source = self.insert(plan_view=True)
@@ -108,10 +110,15 @@ class UnifiedDisplayTest(unittest.TestCase):
             self.assert_placement(global_placement(source), expected)
 
     def test_v17_link_gains_3d_reference_without_loading_source_file(self):
-        source = self.insert()
+        solid, plan = decks.symbol_templates(self.document, self.deck)
+        source = self.document.addObject("App::Link", "LegacyPodest")
+        source.setLink(solid)
+        source.LinkTransform = False
+        source.addProperty("App::PropertyLink", "StageSnapPlanTemplate")
+        source.StageSnapPlanTemplate = plan
+        source.addProperty("App::PropertyString", "StageSnapModelFile")
         original_template = source.LinkedObject
         template_name = original_template.Name
-        source.removeProperty("StageSnap3DTemplate")
         source.StageSnapModelFile = "missing-system/missing-symbol/missing.FCStd"
         original_placement = source.Placement
         with TemporaryDirectory() as temp:
@@ -125,10 +132,10 @@ class UnifiedDisplayTest(unittest.TestCase):
             self.mode(source, True)
             self.assertIn("StageSnap3DTemplate", source.PropertiesList)
             self.assertEqual(source.StageSnap3DTemplate, original_template)
-            self.assertFalse(source.Shape.Solids)
+            self.assertFalse(segment_shape(source).Solids)
             self.mode(source, False)
             self.assertEqual(source.LinkedObject, original_template)
-            self.assertEqual(len(source.Shape.Solids), 1)
+            self.assertEqual(len(segment_shape(source).Solids), 1)
             self.assert_placement(source.Placement, original_placement)
 
 

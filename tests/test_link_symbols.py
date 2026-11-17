@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 import FreeCAD as App
+from freecad.buehnensnap.segments import components, segment_shape
 import Part
 
 from freecad.buehnensnap import decks, plan_symbols
@@ -73,34 +74,34 @@ class LinkSymbolTest(unittest.TestCase):
         first, second = self.insert(), self.insert(2000)
         flat_first, flat_second = self.symbol(first), self.symbol(second)
         self.document.recompute()
-        self.assertEqual(first.TypeId, "App::Link")
+        self.assertEqual(first.TypeId, "App::Part")
         self.assertIs(flat_first, first)
         self.assertIs(flat_second, second)
-        self.assertEqual(first.LinkedObject, second.LinkedObject)
-        self.assertEqual(first.StageSnap3DTemplate, second.StageSnap3DTemplate)
-        self.assertEqual(first.StageSnapPlanTemplate, second.StageSnapPlanTemplate)
-        self.assertNotEqual(first.StageSnap3DTemplate, first.StageSnapPlanTemplate)
+        self.assertEqual(next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').LinkedObject, next(c for c in components(second) if c.StageSnapRole == 'PedestalDeck').LinkedObject)
+        self.assertEqual(next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').StageSnap3DTemplate, next(c for c in components(second) if c.StageSnapRole == 'PedestalDeck').StageSnap3DTemplate)
+        self.assertEqual(next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').StageSnapPlanTemplate, next(c for c in components(second) if c.StageSnapRole == 'PedestalDeck').StageSnapPlanTemplate)
+        self.assertNotEqual(next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').StageSnap3DTemplate, next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').StageSnapPlanTemplate)
         self.assertFalse(any(obj.TypeId == "App::LinkPython" for obj in self.document.Objects))
-        for template in (first.StageSnap3DTemplate, first.StageSnapPlanTemplate):
+        for template in (next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').StageSnap3DTemplate, next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').StageSnapPlanTemplate):
             self.assertEqual(template.Document, self.document)
-            self.assertIn("StageSnapTemplateKey", template.PropertiesList)
+            self.assertIn("StageSnapComponentKey", template.PropertiesList)
             self.assertNotIn("StageSnapKind", template.PropertiesList)
             self.assertFalse(decks.is_deck(template))
             self.assertFalse(decks.is_deck_symbol(template))
         self.assertEqual(decks.deck_from_pick(first), first)
         self.assertEqual(decks.deck_from_pick(flat_first), first)
-        self.assertEqual(len(flat_first.Shape.Edges), 5)
-        self.assertAlmostEqual(flat_first.Shape.BoundBox.ZMax, 275)
+        self.assertEqual(len(segment_shape(flat_first).Edges), 5)
+        self.assertAlmostEqual(segment_shape(flat_first).BoundBox.ZMax, 275)
 
     def test_file_revision_only_changes_new_instances(self):
         first = self.insert()
         self.write_model(extra_solid=True)
         second = self.insert(2000)
         third = self.insert(4000)
-        self.assertNotEqual(first.LinkedObject, second.LinkedObject)
-        self.assertEqual(second.LinkedObject, third.LinkedObject)
-        self.assertEqual(len(first.Shape.Solids), 1)
-        self.assertEqual(len(second.Shape.Solids), 2)
+        self.assertNotEqual(next(c for c in components(first) if c.StageSnapRole == 'PedestalDeck').LinkedObject, next(c for c in components(second) if c.StageSnapRole == 'PedestalDeck').LinkedObject)
+        self.assertEqual(next(c for c in components(second) if c.StageSnapRole == 'PedestalDeck').LinkedObject, next(c for c in components(third) if c.StageSnapRole == 'PedestalDeck').LinkedObject)
+        self.assertEqual(len(segment_shape(first).Solids), 1)
+        self.assertEqual(len(segment_shape(second).Solids), 2)
 
     def test_saved_plan_reopens_without_source_file(self):
         source = self.insert()
@@ -114,16 +115,16 @@ class LinkSymbolTest(unittest.TestCase):
         self.document = App.openDocument(str(saved))
         source = self.document.getObject(name)
         self.document.recompute()
-        self.assertEqual(len(source.Shape.Edges), 5)
-        self.assertAlmostEqual(source.Shape.BoundBox.ZMax, 275)
+        self.assertEqual(len(segment_shape(source).Edges), 5)
+        self.assertAlmostEqual(segment_shape(source).BoundBox.ZMax, 275)
         decks.set_deck_mode(source, False)
         self.document.recompute()
-        self.assertEqual(len(source.Shape.Solids), 1)
+        self.assertEqual(len(segment_shape(source).Solids), 1)
         self.assertEqual(decks.deck_from_pick(source), source)
-        self.assertEqual(source.LinkedObject.Document, self.document)
+        self.assertEqual(next(c for c in components(source) if c.StageSnapRole == 'PedestalDeck').LinkedObject.Document, self.document)
         decks.set_deck_mode(source, True)
         self.document.recompute()
-        self.assertEqual(len(source.Shape.Edges), 5)
+        self.assertEqual(len(segment_shape(source).Edges), 5)
 
     def test_plan_symbol_tracks_movement_in_rotated_parent(self):
         source = self.insert()
@@ -157,10 +158,10 @@ class LinkSymbolTest(unittest.TestCase):
         self.assertEqual(decks.deck_from_pick(old), old)
         new, side = decks.snap_deck(self.document, old, self.deck,
                                     App.Vector(790, 400, 90), 1)
-        self.assertEqual(new.TypeId, "App::Link")
+        self.assertEqual(new.TypeId, "App::Part")
         self.assertEqual(side, "Rechts")
-        self.assertAlmostEqual(new.Shape.BoundBox.XMin, 800)
-        self.assertAlmostEqual(new.Shape.BoundBox.ZMax, 90)
+        self.assertAlmostEqual(segment_shape(new).BoundBox.XMin, 800)
+        self.assertAlmostEqual(segment_shape(new).BoundBox.ZMax, 90)
 
     def test_explicit_hidden_objects_load_independently_of_visibility(self):
         self.write_model(hidden=True)

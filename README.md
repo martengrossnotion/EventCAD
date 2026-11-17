@@ -44,15 +44,42 @@ Beispiel: `buetec-standard/2000x1000/2000x1000.FCStd` enthält `Symbol3D` und `S
 
 Die mitgelieferten 3D-Objekte wurden vorläufig aus den bisherigen STEP-Dateien übernommen. Sie sind statische Part-Geometrien ohne ursprüngliche Konstruktionshistorie. Die Originalkonstruktion kann später in derselben FCStd-Datei ergänzt werden.
 
+## Struktur der Podestflächen
+
+Neue Platzierungen verwenden folgende feste Reihenfolge und Bezeichnungen:
+
+| Übergeordnetes Objekt | Einträge in dieser Reihenfolge |
+| --- | --- |
+| Podestfläche 1 | Views, Podestsegment 001, Podestsegment 002, … |
+| Views | ViewDecks, ViewCorners, ViewFrames |
+| Podestsegment 001 | Corners, Frame, Deck |
+| Corners | CornerTL, CornerTR, CornerBL, CornerBR |
+| Frame | PedestalFrame |
+| Deck | PedestalDeck |
+
+Jedes Segment ist ein App::Part mit genau einer gemeinsam bearbeitbaren Position und Drehung. Die sechs Komponenten sind native App::Link-Objekte. Ihre lokale Platzierung ist schreibgeschützt. Alle Komponenten folgen dem Segment auch beim Bearbeiten in 2D. Ein Klick auf eine Komponente wird für Autosnap ihrem Segment zugeordnet.
+
+ViewDecks, ViewCorners und ViewFrames sind Sichtbarkeitssteuerungen mit Referenzen auf die Komponenten ihrer eigenen Podestfläche. Sie erzeugen keine zweiten Geometrieobjekte und nehmen keine Bauteile aus den Segmentgruppen heraus. Umschalten mit der Leertaste oder über die Eigenschaft Enabled. Individuell ausgeblendete Bauteile bleiben beim Aus-/Einschalten einer Kategorie und beim 2D-/3D-Wechsel ausgeblendet.
+
+Bereits das erste Startpodest erhält eine eigene Podestfläche. Per Autosnap oder über das Zielsegment hinzugefügte Podeste gehören derselben Fläche an. Räumlich getrennte Startplatzierungen erhalten separate Flächen. Verschieben führt noch nicht zu automatischem Trennen oder Zusammenführen von Flächen.
+
+## Komponenten in der Symboldatei
+
+Für eindeutig bearbeitbare Komponenten können in der FCStd-Datei zusätzlich zu Symbol3D/Symbol2D die fertigen Objekte CornerTL, CornerTR, CornerBL, CornerBR, PedestalFrame und PedestalDeck angelegt werden. Namen oder eindeutige Labels werden erkannt. Alle Teile verwenden dasselbe Koordinatensystem wie Symbol3D; T steht für die positive Y-Seite, L für die negative X-Seite. Optionale flache Varianten heißen beispielsweise PedestalDeck2D oder CornerTL2D. Ohne eigene 2D-Komponente wird deren Kontur aus der vorhandenen 3D-Geometrie projiziert.
+
+Das vorhandene detaillierte Bütec-Modell wird anhand seiner sechs vorhandenen Volumenkörper in Deck, Rahmen und vier Ecken zerlegt. Es werden keine neuen Volumenkörper erfunden. Vereinfachte Gesamtmodelle ohne getrennte Bauteile bleiben vollständig unter PedestalDeck. Ihre übrigen fünf Einträge sind leere Platzhalter und bleiben unsichtbar; die Baumstruktur ist trotzdem identisch. Für getrennt schaltbare Rahmen/Ecken benötigen solche Modelle entsprechende echte Komponenten.
+
 ## Wiederverwendung in großen Plänen
 
-EventCAD speichert jede verwendete Kombination aus Modelldatei, Dateirevision und Planungsmaßen einmal als 2D-/3D-Vorlagenpaar im Plan. Jedes platzierte Podest besitzt genau **ein natives `App::Link`-Objekt**. Beim Ansichtswechsel wird nur dessen Geometrievorlage umgeschaltet. Position, Drehung, Sichtbarkeit, Name und Auswahl beziehen sich in beiden Ansichten auf dasselbe Objekt. Du kannst es sowohl im 2D-Grundriss als auch im 3D-Modus verschieben und drehen; beim Wechsel bleibt die Platzierung erhalten. Auch freie Planungsmaße verwenden gemeinsame Vorlagen.
+EventCAD speichert jede Kombination aus Dateirevision und Planungsmaßen als gemeinsames Vorlagenset im Plan. Gleiche Komponenten verwenden dieselben eingebetteten 2D-/3D-Vorlagen. Beim Ansichtswechsel wechseln die Komponentenlinks ihr Ziel; Segmentidentität und Platzierung bleiben gleich. Die Vorlagenbibliothek und die Ursprünge der Segmentcontainer werden im Baum ausgeblendet.
 
-Die Vorlagen liegen unter **EventCAD · Symbolvorlagen** und bleiben ausgeblendet. Sie sind keine platzierten Podeste und werden nicht in Autosnap oder Kollisionsprüfung einbezogen. Änderungen an einer Quelldatei gelten für neue Platzierungen; bereits platzierte Symbole behalten ihre eingebettete Revision. Ein Wechsel zwischen 2D und 3D lädt diese Links nicht erneut von der Festplatte. Für eine geänderte Darstellung setzt du bestehende Podeste neu.
+Die zusätzlichen Gruppen und Links erhöhen die Zahl der Dokumentobjekte. Es gibt keine Python-Ausführung zur laufenden Positionssynchronisierung pro Bauteil. Auch der gespeicherte Plan benötigt die Originaldatei nicht mehr. Änderungen an der Bibliothek wirken auf neue Platzierungen, vorhandene Segmente behalten ihre eingebettete Revision.
 
-Beide Geometrien und alle Links bleiben im Plan eingebettet. Der gespeicherte Plan lässt sich ohne die ursprünglichen Bibliotheksdateien öffnen. Vorlagen sollten im Plan nicht gelöscht oder manuell verschoben werden, solange Links auf sie verweisen.
+Für Skripte liefert segments.segment_shape(segment) die zusammengesetzte Weltgeometrie jedes Bauteils genau einmal. Die automatisch erzeugte App::Part.Shape kann normale Untergruppen und ihre ebenfalls im geometrischen Container registrierten Links doppelt aufzählen; sie sollte deshalb nicht für Mengen-/Volumensummen verwendet werden.
 
 ## Bestehende Pläne
+
+Vorhandene Podeste aus Version 1.9 und älter werden nicht automatisch durch Segmentcontainer ersetzt. Ihre Identität und Referenzen bleiben erhalten. Die neue Struktur gilt für neu eingesetzte Podeste.
 
 Links aus Version 1.7 werden beim Ansichtswechsel auf das gemeinsame Platzierungsobjekt umgestellt. Dafür werden nur ihre eingebetteten Vorlagen verwendet; die Bibliotheksdatei muss nicht vorhanden sein. Der alte separate 2D-Link wird ausgeblendet und zur Erhaltung bestehender Referenzen im Dokument belassen. Das ursprüngliche Podest bleibt das auswählbare, bearbeitbare Objekt in beiden Ansichten.
 
@@ -62,7 +89,7 @@ Fehlt bei einem alten Plan die Quelldatei oder ist sie ungültig, bleibt der ein
 
 ## Entwicklung und Prüfung
 
-`decks.py` verwaltet Katalog, Vorlagen, Links und Autosnap. `plan_symbols.py` lädt die Varianten einer FCStd-Datei revisionsabhängig, ohne offene Originaldokumente zu verändern. `view_modes.py` steuert die Sichtbarkeit. `panel.py` stellt die Bedienoberfläche bereit.
+`decks.py` verwaltet Katalog und Autosnap. `segments.py` verwaltet Segmentbaum und View-Steuerungen, `component_models.py` liest die Bauteilgeometrien. `plan_symbols.py` lädt die Varianten einer FCStd-Datei revisionsabhängig, ohne offene Originaldokumente zu verändern. `view_modes.py` steuert die Sichtbarkeit. `panel.py` stellt die Bedienoberfläche bereit.
 
 Mit FreeCADs Python-Bibliotheken: `python -m unittest discover -s tests -v`. Falls bereits ein anderes EventCAD installiert ist, muss zum Testen dieses Checkouts dessen Pfad im Python-Namensraum `freecad` Vorrang haben; bereits geladene `freecad.buehnensnap`-Module müssen entfernt werden.
 

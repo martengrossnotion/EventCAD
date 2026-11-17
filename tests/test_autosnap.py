@@ -3,6 +3,7 @@
 import unittest
 
 import FreeCAD as App
+from freecad.buehnensnap.segments import components, segment_shape
 
 from freecad.buehnensnap.decks import CATALOG, Deck, deck_area, insert_deck, seed_placement, snap_deck
 
@@ -24,7 +25,7 @@ class AutosnapTest(unittest.TestCase):
         return insert_deck(document, self.deck, placement)
 
     def assert_bounds(self, obj, x, y, width, height):
-        bounds = obj.Shape.BoundBox
+        bounds = segment_shape(obj).BoundBox
         actual = (bounds.XMin, bounds.YMin, bounds.XMax, bounds.YMax, bounds.ZMax)
         for result, expected in zip(actual, (x, y, x + width, y + height, self.top)):
             self.assertAlmostEqual(result, expected)
@@ -75,7 +76,7 @@ class AutosnapTest(unittest.TestCase):
 
         self.assertEqual([obj.Name for obj in document.Objects], original_names)
         self.assertEqual(document.Meta, original_meta)
-        self.assertIsNone(deck_area(target))
+        self.assertIsNotNone(deck_area(target))
 
     def test_rotation_is_absolute_with_a_landscape_target(self):
         for quarter_turn, width, height in ((0, 1000, 2000), (1, 2000, 1000)):
@@ -99,3 +100,4 @@ class AutosnapTest(unittest.TestCase):
                 placement = seed_placement(deck, 100, 200, self.top, quarter_turn)
                 obj = insert_deck(document, deck, placement)
                 self.assert_bounds(obj, 100 - width / 2, 200 - height / 2, width, height)
+

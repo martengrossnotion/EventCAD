@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import FreeCAD as App
+from freecad.buehnensnap.segments import components, segment_shape
 import Part
 
 from freecad.buehnensnap import decks
@@ -55,8 +56,8 @@ class DeckModelTest(unittest.TestCase):
         placement = target.Placement.multVec(App.Vector(1950, 700, 90))
         obj, side = decks.snap_deck(self.document, target, model, placement, 1)
         self.assertEqual(side, "Rechts")
-        self.assertEqual(len(obj.Shape.Solids), 6)
-        self.assertAlmostEqual(obj.Shape.BoundBox.XMin, target.Shape.BoundBox.XMax)
+        self.assertEqual(len(segment_shape(obj).Solids), 6)
+        self.assertAlmostEqual(segment_shape(obj).BoundBox.XMin, segment_shape(target).BoundBox.XMax)
 
     def test_additional_models_are_discovered_only_in_the_selected_system(self):
         with TemporaryDirectory() as temp, patch.object(decks, "MODELS_DIR", Path(temp)):
@@ -87,18 +88,18 @@ class DeckModelTest(unittest.TestCase):
                 save_model(Part.Compound([plate, leg]), path)
                 replacement = self.add_deck(3000)
 
-            self.assertEqual(original.TypeId, "App::Link")
-            self.assertEqual(len(original.Shape.Solids), 1)
-            self.assertEqual(len(replacement.Shape.Solids), 2)
-            bounds = replacement.Shape.BoundBox
+            self.assertEqual(original.TypeId, "App::Part")
+            self.assertEqual(len(segment_shape(original).Solids), 1)
+            self.assertEqual(len(segment_shape(replacement).Solids), 2)
+            bounds = segment_shape(replacement).BoundBox
             for actual, expected in zip((bounds.XMin, bounds.YMin, bounds.ZMin, bounds.ZMax),
                                         (2000, -500, -240, 150)):
                 self.assertAlmostEqual(actual, expected)
 
             symbol = decks.make_deck_symbol(self.document, replacement)
             self.document.recompute()
-            self.assertAlmostEqual(symbol.Shape.BoundBox.ZMax, 150)
-            self.assertAlmostEqual(symbol.Shape.BoundBox.XMin, 2000)
+            self.assertAlmostEqual(segment_shape(symbol).BoundBox.ZMax, 150)
+            self.assertAlmostEqual(segment_shape(symbol).BoundBox.XMin, 2000)
 
             plan = directory / "Plan.FCStd"
             name = replacement.Name
@@ -106,7 +107,7 @@ class DeckModelTest(unittest.TestCase):
             self.close_document()
             path.unlink()
             self.document = App.openDocument(str(plan))
-            self.assertEqual(len(self.document.getObject(name).Shape.Solids), 2)
+            self.assertEqual(len(segment_shape(self.document.getObject(name)).Solids), 2)
 
     def test_wrong_dimensions_leave_the_document_unchanged(self):
         with TemporaryDirectory() as temp:
@@ -130,6 +131,6 @@ class DeckModelTest(unittest.TestCase):
 
         new, side = decks.snap_deck(self.document, legacy, self.deck, App.Vector(1950, 700, 90), 1)
         self.assertEqual(side, "Rechts")
-        self.assertAlmostEqual(new.Shape.BoundBox.XMin, 2000)
-        self.assertAlmostEqual(new.Shape.BoundBox.ZMax, 90)
+        self.assertAlmostEqual(segment_shape(new).BoundBox.XMin, 2000)
+        self.assertAlmostEqual(segment_shape(new).BoundBox.ZMax, 90)
 
