@@ -1,11 +1,13 @@
 """Stage deck catalogue, geometry and FreeCAD document objects."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import isfinite
 from pathlib import Path
 
 import FreeCAD as App
 import Part
+
+from .plan_symbols import find_plan_symbol, load_plan_shape
 
 DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
@@ -54,7 +56,7 @@ def system_decks(system_id, system_label, sizes):
     for length, width in sizes:
         size_label = plate_size_label(length, width)
         yield Deck(f"{system_id}-{length}-{width}", f"{system_label} · {size_label}",
-                   length, width, 90, f"{system_id}/{length}x{width}.step")
+                   length, width, 90, f"{system_id}/{length}x{width}/{length}x{width}.step")
 
 
 CATALOG = {
@@ -67,7 +69,7 @@ CATALOG = {
         (2000, 500), (1500, 500), (1000, 500), (500, 500),
     ))),
     "Planungsmaß": (Deck("planning-1000-1000", "Planungsmaß · 1 × 1 m", 1000, 1000, 90,
-                         "planning/1000x1000.step"), None),
+                         "planning/1000x1000/1000x1000.step"), None),
 }
 
 
@@ -84,24 +86,35 @@ def plan_symbol_models(system_id, system_label):
     folder = MODELS_DIR / system_id
     if not folder.is_dir():
         return
-    files = {path.relative_to(MODELS_DIR).as_posix(): path.name for path in folder.iterdir()
-             if path.suffix.lower() in MODEL_EXTENSIONS and path.is_file()}
+    files = {}
+    for symbol_folder in sorted(folder.iterdir(), key=lambda path: (path.name.casefold(), path.name)):
+        if not symbol_folder.is_dir() or symbol_folder.name.startswith("."):
+            continue
+        try:
+            path = symbol_model(symbol_folder)
+        except ValueError as error:
+            App.Console.PrintWarning(f"BühnenSnap: {error}\n")
+            continue
+        if path is not None:
+            files[path.relative_to(MODELS_DIR).as_posix()] = symbol_folder.name
     for deck in filter(None, CATALOG.get(system_label, ())):
-        if deck.model_file in files:
-            yield plate_size_label(deck.length, deck.width), deck.model_file
-            del files[deck.model_file]
+        model_file = next((name for name in files
+                           if Path(name).parent == Path(deck.model_file).parent), None)
+        if model_file is not None:
+            yield plate_size_label(deck.length, deck.width), model_file
+            del files[model_file]
     for model_file in sorted(files, key=lambda name: (name.casefold(), name)):
         yield files[model_file], model_file
 
 
 def deck_for_model(system_label, model_file):
     for deck in filter(None, CATALOG.get(system_label, ())):
-        if deck.model_file == model_file:
-            return deck
+        if Path(deck.model_file).parent == Path(model_file).parent:
+            return replace(deck, model_file=model_file)
 
     path = MODELS_DIR / model_file
     bounds = read_model_shape(path).BoundBox
-    return Deck(model_file, f"{system_label} · {path.stem}",
+    return Deck(model_file, f"{system_label} · {path.parent.name}",
                 bounds.XLength, bounds.YLength, bounds.ZLength, model_file)
 
 
@@ -152,7 +165,7 @@ def area_for_snap(document, target):
 
 
 class DeckPlanSymbol:
-    """Regenerate the selectable plan face when its source deck changes."""
+    """Place the embedded plan geometry when its source deck changes."""
 
     def execute(self, symbol):
         source = symbol.StageSnapSource
@@ -160,11 +173,71 @@ class DeckPlanSymbol:
             symbol.Shape = Part.Shape()
             return
         length, width, top = source.Length.Value, source.Width.Value, source.Height.Value
-        corners = [App.Vector(x, y, top) for x, y in (
-            (0, 0), (length, 0), (length, width), (0, width), (0, 0),
-        )]
-        symbol.Shape = Part.Face(Part.makePolygon(corners))
+        stored = getattr(symbol, "StageSnapPlanShape", None)
+        if stored is not None and not stored.isNull():
+            shape = stored.copy()
+            shape.translate(App.Vector(0, 0, top))
+            symbol.Shape = Part.Compound([shape])
+        else:
+            corners = [App.Vector(x, y, top) for x, y in (
+                (0, 0), (length, 0), (length, width), (0, width), (0, 0),
+            )]
+            symbol.Shape = Part.Face(Part.makePolygon(corners))
         symbol.Placement = source.Placement
+
+
+def symbol_model(folder):
+    matches = [path for path in folder.iterdir()
+               if path.is_file() and path.suffix.lower() in MODEL_EXTENSIONS]
+    if len(matches) > 1:
+        raise ValueError(f"Symbolordner {folder.name}: Es darf nur eine STEP-Datei "
+                         "für die 3D-Darstellung enthalten sein.")
+    return matches[0] if matches else None
+
+
+def current_model_file(source):
+    """Resolve the current STEP in the linked symbol folder, including old plans."""
+    model_file = read_deck(source).model_file
+    if not model_file:
+        return None
+    path = MODELS_DIR / model_file
+    # Before 1.6.0 files lived directly in the system folder.
+    if path.parent.parent == MODELS_DIR and (path.parent / path.stem).is_dir():
+        path = path.parent / path.stem / path.name
+    if path.parent.is_dir():
+        path = symbol_model(path.parent) or path
+    model_file = path.relative_to(MODELS_DIR).as_posix()
+    if "StageSnapModelFile" not in source.PropertiesList:
+        source.addProperty("App::PropertyString", "StageSnapModelFile", "BühnenSnap")
+    if source.StageSnapModelFile != model_file:
+        source.StageSnapModelFile = model_file
+    return model_file
+
+
+def refresh_deck_symbol(symbol):
+    """Refresh from a matching companion, retaining embedded geometry if absent."""
+    source = symbol.StageSnapSource
+    deck = read_deck(source)
+    try:
+        model_file = current_model_file(source)
+        if not model_file:
+            return
+        path = find_plan_symbol(MODELS_DIR / model_file)
+        if path is None:
+            return
+        shape = load_plan_shape(path, deck.length, deck.width)
+    except Exception as error:
+        App.Console.PrintWarning(f"BühnenSnap: 2D-Symbol für {source.Label} konnte nicht geladen "
+                                 f"werden. Gespeichertes Symbol bzw. Rechteck wird verwendet.\n"
+                                 f"{error}\n")
+        return
+    if "StageSnapPlanShape" not in symbol.PropertiesList:
+        symbol.addProperty("Part::PropertyPartShape", "StageSnapPlanShape", "BühnenSnap")
+        symbol.addProperty("App::PropertyString", "StageSnapPlanFile", "BühnenSnap")
+        symbol.setEditorMode("StageSnapPlanShape", 2)
+        symbol.setEditorMode("StageSnapPlanFile", 1)
+    symbol.StageSnapPlanShape = shape
+    symbol.StageSnapPlanFile = path.relative_to(MODELS_DIR).as_posix()
 
 
 def deck_face_colors(deck):
@@ -203,6 +276,7 @@ def make_deck_symbol(document, deck):
     for name in ("StageSnapKind", "StageSnapSource", "Placement"):
         symbol.setEditorMode(name, 1)
     symbol.Proxy = DeckPlanSymbol()
+    refresh_deck_symbol(symbol)
     if App.GuiUp:
         # Activate the built-in shape display of the scripted part feature.
         symbol.ViewObject.Proxy = 0
@@ -217,8 +291,18 @@ def make_deck_symbol(document, deck):
 
 
 def read_deck(obj):
+    model_file = getattr(obj, "StageSnapModelFile", "")
+    if not model_file:
+        # Files placed before 1.6.0 only stored the catalogue ID.
+        for sizes in CATALOG.values():
+            for deck in filter(None, sizes):
+                if deck.catalog_id == obj.StageSnapCatalogId:
+                    model_file = deck.model_file
+                    break
+        if not model_file and Path(obj.StageSnapCatalogId).suffix.lower() in MODEL_EXTENSIONS:
+            model_file = obj.StageSnapCatalogId
     return Deck(obj.StageSnapCatalogId, obj.Label, obj.Length.Value,
-                obj.Width.Value, obj.Height.Value)
+                obj.Width.Value, obj.Height.Value, model_file or None)
 
 
 def seed_placement(deck, x, y, top, quarter_turn):
@@ -368,10 +452,12 @@ def insert_deck(document, deck, placement, *, plan_view=False, target=None):
                 obj.setEditorMode(name, 1)
         obj.Length, obj.Width, obj.Height = deck.dimensions
         obj.Placement = placement
-        for prop, value in (("StageSnapKind", DECK_KIND), ("StageSnapCatalogId", deck.catalog_id)):
+        for prop, value in (("StageSnapKind", DECK_KIND), ("StageSnapCatalogId", deck.catalog_id),
+                            ("StageSnapModelFile", deck.model_file or "")):
             obj.addProperty("App::PropertyString", prop, "BühnenSnap")
             setattr(obj, prop, value)
-            obj.setEditorMode(prop, 1)
+            if prop != "StageSnapModelFile":
+                obj.setEditorMode(prop, 1)
         if App.GuiUp:
             obj.ViewObject.ShapeColor = (0.76, 0.63, 0.41)
             obj.ViewObject.LineColor = (0.23, 0.19, 0.14)

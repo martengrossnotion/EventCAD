@@ -1,4 +1,4 @@
-BühnenSnap 1.5.1 · Event-Arbeitsbereich für FreeCAD
+BühnenSnap 1.6.0 · Event-Arbeitsbereich für FreeCAD
 
 Installation unter Windows
 
@@ -33,3 +33,9 @@ Beim Wechsel in einen anderen Arbeitsbereich endet Autosnap.
 Das Add-on verwendet die mit FreeCAD gelieferten Bibliotheken.
 
 Die Anleitung zum Hinzufügen und Austauschen von STEP-Modellen steht in README.md.
+Jedes Symbol hat einen eigenen Unterordner unter resources/models/<System>/.
+Dieser enthält genau eine STEP-Datei für 3D und eine FCStd-Datei für 2D.
+Die Dateinamen sind frei wählbar. Die FCStd-Datei enthält flache Geometrie
+in der XY-Ebene im gleichen Maßstab. Beim Wechsel zu „2D-Grundriss“ wird
+sie geladen; ohne Datei erscheint ein Rechteck bzw. das bereits im Plan
+gespeicherte 2D-Symbol.
