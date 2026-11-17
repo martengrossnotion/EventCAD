@@ -1,4 +1,4 @@
-BühnenSnap 1.5.0 · Event-Arbeitsbereich für FreeCAD
+BühnenSnap 1.5.1 · Event-Arbeitsbereich für FreeCAD
 
 Installation unter Windows
 
