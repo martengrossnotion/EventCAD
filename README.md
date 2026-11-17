@@ -46,7 +46,7 @@ Die mitgelieferten 3D-Objekte wurden vorläufig aus den bisherigen STEP-Dateien 
 
 ## Wiederverwendung in großen Plänen
 
-EventCAD speichert jede verwendete Kombination aus Modelldatei, Dateirevision und Planungsmaßen einmal als 2D-/3D-Vorlagenpaar im Plan. Die platzierten 3D-Podeste sind `App::Link`-Objekte. Die 2D-Symbole sind `App::LinkPython`-Objekte, deren Platzierung dem Podest folgt. Auch freie Planungsmaße verwenden gemeinsame Vorlagen.
+EventCAD speichert jede verwendete Kombination aus Modelldatei, Dateirevision und Planungsmaßen einmal als 2D-/3D-Vorlagenpaar im Plan. Jedes platzierte Podest besitzt genau **ein natives `App::Link`-Objekt**. Beim Ansichtswechsel wird nur dessen Geometrievorlage umgeschaltet. Position, Drehung, Sichtbarkeit, Name und Auswahl beziehen sich in beiden Ansichten auf dasselbe Objekt. Du kannst es sowohl im 2D-Grundriss als auch im 3D-Modus verschieben und drehen; beim Wechsel bleibt die Platzierung erhalten. Auch freie Planungsmaße verwenden gemeinsame Vorlagen.
 
 Die Vorlagen liegen unter **EventCAD · Symbolvorlagen** und bleiben ausgeblendet. Sie sind keine platzierten Podeste und werden nicht in Autosnap oder Kollisionsprüfung einbezogen. Änderungen an einer Quelldatei gelten für neue Platzierungen; bereits platzierte Symbole behalten ihre eingebettete Revision. Ein Wechsel zwischen 2D und 3D lädt diese Links nicht erneut von der Festplatte. Für eine geänderte Darstellung setzt du bestehende Podeste neu.
 
@@ -54,7 +54,9 @@ Beide Geometrien und alle Links bleiben im Plan eingebettet. Der gespeicherte Pl
 
 ## Bestehende Pläne
 
-Podeste aus älteren EventCAD-Versionen bleiben auswählbar, andockbar und zwischen 2D/3D umschaltbar. Sie behalten ihre eingebettete Geometrie und werden nicht automatisch durch Links ersetzt. Neue Podeste verwenden die gemeinsame Vorlagenverwaltung. Alte STEP-Modellpfade werden beim Nachladen eines alten 2D-Symbols auf die FCStd-Datei desselben Symbolordners aufgelöst; frühere flache Katalogpfade werden ebenfalls unterstützt.
+Links aus Version 1.7 werden beim Ansichtswechsel auf das gemeinsame Platzierungsobjekt umgestellt. Dafür werden nur ihre eingebetteten Vorlagen verwendet; die Bibliotheksdatei muss nicht vorhanden sein. Der alte separate 2D-Link wird ausgeblendet und zur Erhaltung bestehender Referenzen im Dokument belassen. Das ursprüngliche Podest bleibt das auswählbare, bearbeitbare Objekt in beiden Ansichten.
+
+Ältere Podeste vom Typ `Part::Box` oder `Part::Feature` bleiben auswählbar, andockbar und zwischen 2D/3D umschaltbar. Sie behalten ihre bisherige Darstellung mit separatem Grundriss und werden nicht automatisch durch Links ersetzt. Neue Podeste verwenden die gemeinsame Vorlagenverwaltung. Alte STEP-Modellpfade werden beim Nachladen eines alten 2D-Symbols auf die FCStd-Datei desselben Symbolordners aufgelöst; frühere flache Katalogpfade werden ebenfalls unterstützt.
 
 Fehlt bei einem alten Plan die Quelldatei oder ist sie ungültig, bleibt der eingebettete Grundriss erhalten; ohne eingebetteten Grundriss wird ein Rechteck verwendet. Neue Bibliothekssymbole benötigen gültige 2D- und 3D-Objekte; fehlerhafte Dateien werden beim Platzieren mit einer Fehlermeldung zurückgewiesen.
 

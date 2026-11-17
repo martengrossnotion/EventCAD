@@ -1,4 +1,4 @@
-EventCAD 1.7.0 – Event-Arbeitsbereich für FreeCAD
+EventCAD 1.8.0 – Event-Arbeitsbereich für FreeCAD
 
 Voraussetzung: FreeCAD 1.0 oder neuer.
 
@@ -22,6 +22,10 @@ Die vorhandenen STEP-Geometrien wurden in echte FCStd-Dateien übernommen.
 
 Gleiche Symbole verwenden gemeinsame, im Plan eingebettete Vorlagen und
 App::Link-Instanzen. Bereits platzierte Objekte behalten ihre Dateirevision.
+Jedes neue Podest hat genau ein Platzierungsobjekt. Beim Wechsel zwischen
+2D und 3D wird dessen Geometrievorlage umgeschaltet; Position, Drehung und
+Sichtbarkeit bleiben erhalten. Du kannst in beiden Ansichten verschieben.
+Links aus Version 1.7 werden beim Ansichtswechsel entsprechend umgestellt.
 Alte Pläne bleiben verwendbar; neue Platzierungen nutzen die Link-Verwaltung.
 
 Details zu Modellaufbau, Austausch und Bedienung stehen in README.md.

@@ -455,10 +455,10 @@ def insert_deck(document, deck, placement, *, plan_view=False, target=None):
         obj.addProperty("App::PropertyLink", "StageSnapPlanTemplate", "BühnenSnap")
         obj.StageSnapPlanTemplate = template2d
         obj.setEditorMode("StageSnapPlanTemplate", 2)
-        symbol = make_deck_symbol(document, obj)
-        if App.GuiUp:
-            obj.ViewObject.Visibility = not plan_view
-            symbol.ViewObject.Visibility = plan_view
+        obj.addProperty("App::PropertyLink", "StageSnap3DTemplate", "BühnenSnap")
+        obj.StageSnap3DTemplate = template3d
+        obj.setEditorMode("StageSnap3DTemplate", 2)
+        set_deck_mode(obj, plan_view)
         document.recompute()
     except Exception:
         document.abortTransaction()
@@ -535,30 +535,37 @@ class LinkedPlanSymbol:
 
 
 def make_deck_symbol(document, deck):
-    if deck.TypeId != "App::Link":
-        return make_legacy_deck_symbol(document, deck)
-    for obj in document.Objects:
-        if is_deck_symbol(obj) and obj.StageSnapSource == deck:
-            return obj
-    symbol = document.addObject("App::LinkPython", "PodestGrundriss")
-    symbol.setLink(deck.StageSnapPlanTemplate)
-    symbol.LinkTransform = False
-    symbol.Label = f"{deck.Label} · 2D"
-    symbol.addProperty("App::PropertyString", "StageSnapKind", "BühnenSnap")
-    symbol.StageSnapKind = DECK_SYMBOL_KIND
-    symbol.addProperty("App::PropertyLink", "StageSnapSource", "BühnenSnap")
-    symbol.StageSnapSource = deck
-    container = deck_area(deck) or deck.getParentGeoFeatureGroup()
-    if container is not None:
-        container.addObject(symbol)
-    symbol.Proxy = LinkedPlanSymbol()
-    symbol.Proxy.execute(symbol)
-    for name in ("StageSnapKind", "StageSnapSource", "Placement"):
-        symbol.setEditorMode(name, 1)
+    """Legacy entry point: native links now own both representations."""
+    if deck.TypeId == "App::Link":
+        return deck
+    return make_legacy_deck_symbol(document, deck)
+
+
+def set_deck_mode(source, plan_view):
+    """Switch shared geometry on the same editable, placed native link.
+
+    Version 1.7 links can be upgraded using only embedded templates, including
+    when their library file is absent. Placement and visibility belong to the
+    instance, never to its currently selected representation.
+    """
+    if source.TypeId != "App::Link":
+        raise ValueError("Die gemeinsame Darstellung benötigt ein App::Link-Podest.")
+    if "StageSnap3DTemplate" not in source.PropertiesList:
+        source.addProperty("App::PropertyLink", "StageSnap3DTemplate", "BühnenSnap")
+        source.StageSnap3DTemplate = source.LinkedObject
+        source.setEditorMode("StageSnap3DTemplate", 2)
+    target = source.StageSnapPlanTemplate if plan_view else source.StageSnap3DTemplate
+    if target is None:
+        raise ValueError(f"Die eingebettete Symbolvorlage für {source.Label} fehlt.")
+    placement = source.Placement.copy()
+    visible = source.Visibility
+    if source.LinkedObject != target:
+        source.setLink(target)
+        source.LinkTransform = False
+        source.Placement = placement
+        source.Visibility = visible
     if App.GuiUp:
-        symbol.ViewObject.ShowInTree = False
-        symbol.ViewObject.Visibility = False
-    return symbol
+        source.ViewObject.ShowInTree = True
 
 
 def refresh_deck_symbol(symbol):

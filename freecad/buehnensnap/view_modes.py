@@ -3,7 +3,7 @@
 import FreeCADGui as Gui
 
 from .decks import (deck_from_pick, is_deck, is_deck_symbol, make_deck_symbol,
-                    refresh_deck_symbol, set_deck_frame_color)
+                    refresh_deck_symbol, set_deck_frame_color, set_deck_mode)
 
 
 PLAN_MODE = "2D"
@@ -35,6 +35,16 @@ def show_mode(document, view, mode):
         if not is_deck(source):
             continue
         symbol = symbols.get(source.Name)
+        if source.TypeId == "App::Link":
+            if "StageSnap3DTemplate" not in source.PropertiesList:
+                # Recover the visible state from the old pair once. Later
+                # switches preserve the visibility of the single instance.
+                source.Visibility = source.Visibility or bool(symbol and symbol.Visibility)
+            set_deck_mode(source, plan_view)
+            if symbol is not None:
+                symbol.ViewObject.Visibility = False
+                symbol.ViewObject.ShowInTree = False
+            continue
         visible = source.ViewObject.Visibility or bool(symbol and symbol.ViewObject.Visibility)
         if symbol is None and plan_view:
             symbol = make_deck_symbol(document, source)

@@ -62,10 +62,9 @@ class LinkSymbolTest(unittest.TestCase):
         return decks.insert_deck(self.document, self.deck, placement)
 
     def symbol(self, source):
-        existing = next((obj for obj in self.document.Objects
-                         if decks.is_deck_symbol(obj)
-                         and obj.StageSnapSource == source), None)
-        return existing or decks.make_deck_symbol(self.document, source)
+        decks.set_deck_mode(source, True)
+        self.document.recompute()
+        return source
 
     def assert_vector(self, actual, expected):
         self.assertLess((actual - expected).Length, 1e-7)
@@ -75,11 +74,14 @@ class LinkSymbolTest(unittest.TestCase):
         flat_first, flat_second = self.symbol(first), self.symbol(second)
         self.document.recompute()
         self.assertEqual(first.TypeId, "App::Link")
-        self.assertEqual(flat_first.TypeId, "App::LinkPython")
+        self.assertIs(flat_first, first)
+        self.assertIs(flat_second, second)
         self.assertEqual(first.LinkedObject, second.LinkedObject)
-        self.assertEqual(flat_first.LinkedObject, flat_second.LinkedObject)
-        self.assertNotEqual(first.LinkedObject, flat_first.LinkedObject)
-        for template in (first.LinkedObject, flat_first.LinkedObject):
+        self.assertEqual(first.StageSnap3DTemplate, second.StageSnap3DTemplate)
+        self.assertEqual(first.StageSnapPlanTemplate, second.StageSnapPlanTemplate)
+        self.assertNotEqual(first.StageSnap3DTemplate, first.StageSnapPlanTemplate)
+        self.assertFalse(any(obj.TypeId == "App::LinkPython" for obj in self.document.Objects))
+        for template in (first.StageSnap3DTemplate, first.StageSnapPlanTemplate):
             self.assertEqual(template.Document, self.document)
             self.assertIn("StageSnapTemplateKey", template.PropertiesList)
             self.assertNotIn("StageSnapKind", template.PropertiesList)
@@ -102,21 +104,26 @@ class LinkSymbolTest(unittest.TestCase):
 
     def test_saved_plan_reopens_without_source_file(self):
         source = self.insert()
-        symbol = self.symbol(source)
-        names = source.Name, symbol.Name
+        self.symbol(source)
+        name = source.Name
         self.document.recompute()
         saved = self.root / "StandalonePlan.FCStd"
         self.document.saveAs(str(saved))
         App.closeDocument(self.document.Name)
         self.model.unlink()
         self.document = App.openDocument(str(saved))
-        source, symbol = [self.document.getObject(name) for name in names]
+        source = self.document.getObject(name)
+        self.document.recompute()
+        self.assertEqual(len(source.Shape.Edges), 5)
+        self.assertAlmostEqual(source.Shape.BoundBox.ZMax, 275)
+        decks.set_deck_mode(source, False)
         self.document.recompute()
         self.assertEqual(len(source.Shape.Solids), 1)
-        self.assertEqual(len(symbol.Shape.Edges), 5)
-        self.assertEqual(decks.deck_from_pick(symbol), source)
+        self.assertEqual(decks.deck_from_pick(source), source)
         self.assertEqual(source.LinkedObject.Document, self.document)
-        self.assertAlmostEqual(symbol.Shape.BoundBox.ZMax, 275)
+        decks.set_deck_mode(source, True)
+        self.document.recompute()
+        self.assertEqual(len(source.Shape.Edges), 5)
 
     def test_plan_symbol_tracks_movement_in_rotated_parent(self):
         source = self.insert()
@@ -131,11 +138,13 @@ class LinkSymbolTest(unittest.TestCase):
         source.Placement.Base = App.Vector(35, 80, 185)
         self.document.recompute()
         self.assertEqual(symbol.getParentGeoFeatureGroup(), parent)
-        self.assert_vector(plan_symbols.global_placement(symbol).Base,
-                           plan_symbols.global_placement(source).Base)
-        for point in (App.Vector(0, 0, 90), App.Vector(800, 500, 90)):
-            self.assert_vector(plan_symbols.global_placement(symbol).multVec(point),
-                               plan_symbols.global_placement(source).multVec(point))
+        expected = parent.Placement * source.Placement
+        for plan_view in (False, True):
+            decks.set_deck_mode(source, plan_view)
+            self.document.recompute()
+            for point in (App.Vector(0, 0, 90), App.Vector(800, 500, 90)):
+                self.assert_vector(plan_symbols.global_placement(source).multVec(point),
+                                   expected.multVec(point))
 
     def test_legacy_box_remains_pickable_and_accepts_link_snap(self):
         old = self.document.addObject("Part::Box", "LegacyPodest")
