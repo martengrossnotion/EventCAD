@@ -37,7 +37,7 @@ class DeckModelTest(unittest.TestCase):
         filename = "Buetec_standard_1x2m-Buetec_standard_1x2m.step"
         entries = dict(decks.plan_symbol_models("buetec-standard", "BÜTEC Standard"))
         self.assertIn("2 × 1 m", entries)
-        model = decks.deck_for_model("BÜTEC Standard", entries[filename])
+        model = decks.deck_for_model("BÜTEC Standard", entries[Path(filename).stem])
         for actual, expected in zip(model.dimensions, (1000, 2000, 90)):
             self.assertAlmostEqual(actual, expected)
 
@@ -53,11 +53,13 @@ class DeckModelTest(unittest.TestCase):
             folder = Path(temp) / "buetec-eco"
             folder.mkdir()
             (folder / ".gitkeep").touch()
-            (folder / "Unterordner.step").mkdir()
+            (folder / "Leerer Ordner").mkdir()
             filename = "Kleines Podest.STP"
-            Part.makeBox(735, 520, 44).exportStep(str(folder / filename))
+            symbol_folder = folder / "Kleines Podest"
+            symbol_folder.mkdir()
+            Part.makeBox(735, 520, 44).exportStep(str(symbol_folder / filename))
             entries = list(decks.plan_symbol_models("buetec-eco", "BÜTEC Eco"))
-            self.assertEqual(entries, [(filename, f"buetec-eco/{filename}")])
+            self.assertEqual(entries, [("Kleines Podest", f"buetec-eco/Kleines Podest/{filename}")])
             self.assertEqual(list(decks.plan_symbol_models("buetec-standard", "BÜTEC Standard")), [])
             model = decks.deck_for_model("BÜTEC Eco", entries[0][1])
             self.assertEqual(model.dimensions, (735, 520, 44))
@@ -66,7 +68,7 @@ class DeckModelTest(unittest.TestCase):
         with TemporaryDirectory() as temp:
             directory = Path(temp)
             path = directory / self.deck.model_file
-            path.parent.mkdir()
+            path.parent.mkdir(parents=True)
             Part.makeBox(*self.deck.dimensions).exportStep(str(path))
             with patch.object(decks, "MODELS_DIR", directory):
                 original = self.add_deck()
@@ -100,7 +102,7 @@ class DeckModelTest(unittest.TestCase):
         with TemporaryDirectory() as temp:
             directory = Path(temp)
             path = directory / self.deck.model_file
-            path.parent.mkdir()
+            path.parent.mkdir(parents=True)
             Part.makeBox(1000, 2000, 90).exportStep(str(path))
             with patch.object(decks, "MODELS_DIR", directory):
                 with self.assertRaisesRegex(ValueError, "2000 × 1000 mm"):
