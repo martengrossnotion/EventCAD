@@ -8,6 +8,8 @@ import FreeCAD as App
 import Part
 
 from .plan_symbols import find_plan_symbol, load_plan_shape, load_variant_shape, global_placement
+from .plan_symbols import load_variant_appearance
+from .appearance import apply_default_materials
 
 DECK_KIND = "stage-snap:deck:v1"
 DECK_SYMBOL_KIND = "stage-snap:deck-symbol:v1"
@@ -93,7 +95,7 @@ def plan_symbol_models(system_id, system_label):
         try:
             path = symbol_model(symbol_folder)
         except ValueError as error:
-            App.Console.PrintWarning(f"BühnenSnap: {error}\n")
+            App.Console.PrintWarning(f"Podest: {error}\n")
             continue
         if path is not None:
             files[path.relative_to(MODELS_DIR).as_posix()] = symbol_folder.name
@@ -151,7 +153,7 @@ def area_for_snap(document, target):
 
     area = document.addObject("App::DocumentObjectGroup", "Podestflaeche")
     area.Label = f"Podestfläche {number}"
-    area.addProperty("App::PropertyInteger", "StageSnapAreaNumber", "BühnenSnap")
+    area.addProperty("App::PropertyInteger", "StageSnapAreaNumber", "Podest")
     area.StageSnapAreaNumber = number
     area.setEditorMode("StageSnapAreaNumber", 1)
 
@@ -208,7 +210,7 @@ def current_model_file(source):
         path = symbol_model(path.parent) or path
     model_file = path.relative_to(MODELS_DIR).as_posix()
     if "StageSnapModelFile" not in source.PropertiesList:
-        source.addProperty("App::PropertyString", "StageSnapModelFile", "BühnenSnap")
+        source.addProperty("App::PropertyString", "StageSnapModelFile", "Podest")
     if source.StageSnapModelFile != model_file:
         source.StageSnapModelFile = model_file
     return model_file
@@ -227,13 +229,13 @@ def refresh_legacy_deck_symbol(symbol):
             return
         shape = load_plan_shape(path, deck.length, deck.width)
     except Exception as error:
-        App.Console.PrintWarning(f"BühnenSnap: 2D-Symbol für {source.Label} konnte nicht geladen "
+        App.Console.PrintWarning(f"Podest: 2D-Symbol für {source.Label} konnte nicht geladen "
                                  f"werden. Gespeichertes Symbol bzw. Rechteck wird verwendet.\n"
                                  f"{error}\n")
         return
     if "StageSnapPlanShape" not in symbol.PropertiesList:
-        symbol.addProperty("Part::PropertyPartShape", "StageSnapPlanShape", "BühnenSnap")
-        symbol.addProperty("App::PropertyString", "StageSnapPlanFile", "BühnenSnap")
+        symbol.addProperty("Part::PropertyPartShape", "StageSnapPlanShape", "Podest")
+        symbol.addProperty("App::PropertyString", "StageSnapPlanFile", "Podest")
         symbol.setEditorMode("StageSnapPlanShape", 2)
         symbol.setEditorMode("StageSnapPlanFile", 1)
     symbol.StageSnapPlanShape = shape
@@ -269,9 +271,9 @@ def make_legacy_deck_symbol(document, deck):
     else:
         symbol = container.newObject("Part::FeaturePython", "PodestGrundriss")
     symbol.Label = f"{deck.Label} · 2D"
-    symbol.addProperty("App::PropertyString", "StageSnapKind", "BühnenSnap")
+    symbol.addProperty("App::PropertyString", "StageSnapKind", "Podest")
     symbol.StageSnapKind = DECK_SYMBOL_KIND
-    symbol.addProperty("App::PropertyLink", "StageSnapSource", "BühnenSnap")
+    symbol.addProperty("App::PropertyLink", "StageSnapSource", "Podest")
     symbol.StageSnapSource = deck
     for name in ("StageSnapKind", "StageSnapSource", "Placement"):
         symbol.setEditorMode(name, 1)
@@ -442,20 +444,20 @@ def insert_deck(document, deck, placement, *, plan_view=False, target=None):
                 placement = global_placement(container).inverse() * placement
         obj.Label = f"Podest {obj.Name.removeprefix('Podest') or '000'} · {deck.label}"
         for name in ("Length", "Width", "Height"):
-            obj.addProperty("App::PropertyLength", name, "BühnenSnap")
+            obj.addProperty("App::PropertyLength", name, "Podest")
             obj.setEditorMode(name, 1)
         obj.Length, obj.Width, obj.Height = deck.dimensions
         obj.Placement = placement
         for prop, value in (("StageSnapKind", DECK_KIND), ("StageSnapCatalogId", deck.catalog_id),
                             ("StageSnapModelFile", deck.model_file or "")):
-            obj.addProperty("App::PropertyString", prop, "BühnenSnap")
+            obj.addProperty("App::PropertyString", prop, "Podest")
             setattr(obj, prop, value)
             if prop != "StageSnapModelFile":
                 obj.setEditorMode(prop, 1)
-        obj.addProperty("App::PropertyLink", "StageSnapPlanTemplate", "BühnenSnap")
+        obj.addProperty("App::PropertyLink", "StageSnapPlanTemplate", "Podest")
         obj.StageSnapPlanTemplate = template2d
         obj.setEditorMode("StageSnapPlanTemplate", 2)
-        obj.addProperty("App::PropertyLink", "StageSnap3DTemplate", "BühnenSnap")
+        obj.addProperty("App::PropertyLink", "StageSnap3DTemplate", "Podest")
         obj.StageSnap3DTemplate = template3d
         obj.setEditorMode("StageSnap3DTemplate", 2)
         set_deck_mode(obj, plan_view)
@@ -473,7 +475,7 @@ def template_group(document):
             return obj
     group = document.addObject("App::DocumentObjectGroup", "EventCADSymbolvorlagen")
     group.Label = "EventCAD · Symbolvorlagen"
-    group.addProperty("App::PropertyBool", "StageSnapTemplateLibrary", "BühnenSnap")
+    group.addProperty("App::PropertyBool", "StageSnapTemplateLibrary", "Podest")
     group.StageSnapTemplateLibrary = True
     group.setEditorMode("StageSnapTemplateLibrary", 2)
     return group
@@ -506,15 +508,17 @@ def symbol_templates(document, deck):
         template.Shape = shape
         template.Label = f"{deck.label} · {variant}"
         for prop, value in (("StageSnapTemplateKey", key), ("StageSnapVariant", variant)):
-            template.addProperty("App::PropertyString", prop, "BühnenSnap")
+            template.addProperty("App::PropertyString", prop, "Podest")
             setattr(template, prop, value)
             template.setEditorMode(prop, 2)
         group.addObject(template)
         if App.GuiUp:
-            template.ViewObject.ShapeColor = (0.76, 0.63, 0.41)
-            template.ViewObject.LineColor = (0.23, 0.19, 0.14)
-            if variant == "Symbol3D":
-                set_deck_frame_color(template)
+            materials = load_variant_appearance(path, variant) if deck.model_file else []
+            if materials:
+                template.ViewObject.ShapeAppearance = materials
+                template.ViewObject.LineColor = (0.23, 0.19, 0.14)
+            else:
+                apply_default_materials(template, variant == "Symbol2D")
             template.ViewObject.Visibility = False
         templates[variant] = template
     return templates["Symbol3D"], templates["Symbol2D"]
@@ -551,7 +555,7 @@ def set_deck_mode(source, plan_view):
     if source.TypeId != "App::Link":
         raise ValueError("Die gemeinsame Darstellung benötigt ein App::Link-Podest.")
     if "StageSnap3DTemplate" not in source.PropertiesList:
-        source.addProperty("App::PropertyLink", "StageSnap3DTemplate", "BühnenSnap")
+        source.addProperty("App::PropertyLink", "StageSnap3DTemplate", "Podest")
         source.StageSnap3DTemplate = source.LinkedObject
         source.setEditorMode("StageSnap3DTemplate", 2)
     target = source.StageSnapPlanTemplate if plan_view else source.StageSnap3DTemplate

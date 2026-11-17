@@ -13,7 +13,7 @@ from .view_modes import active_3d_view, is_plan_view
 
 class StageSnapDock(QtWidgets.QDockWidget):
     def __init__(self, parent):
-        super().__init__("BühnenSnap · Podeste", parent)
+        super().__init__("Podest", parent)
         self.setObjectName("BuehnenSnapPodestPanel")
         self.setAllowedAreas(QtCore.Qt.LeftDockWidgetArea | QtCore.Qt.RightDockWidgetArea)
         self.view = None
@@ -31,7 +31,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
         layout = QtWidgets.QVBoxLayout(panel)
         intro = QtWidgets.QLabel(
             "Podestsystem und Plansymbol wählen. Für Autosnap knapp innerhalb der gewünschten "
-            "Kante eines vorhandenen BühnenSnap-Podests klicken."
+            "Kante eines vorhandenen Podests klicken."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -58,7 +58,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
 
         start = QtWidgets.QGroupBox("Startpodest oder separate Fläche")
         form = QtWidgets.QFormLayout(start)
-        self.x, self.y, self.z = [self.number_field(-1000000, 1000000, 0) for _ in range(3)]
+        self.x, self.y, self.z = [self.coordinate_field() for _ in range(3)]
         form.addRow("Mitte X", self.x)
         form.addRow("Mitte Y", self.y)
         form.addRow("Oberkante Z", self.z)
@@ -88,6 +88,15 @@ class StageSnapDock(QtWidgets.QDockWidget):
         self.setWidget(scroll)
         self.visibilityChanged.connect(self.stop_when_hidden)
         self.refresh_models()
+
+    @staticmethod
+    def coordinate_field():
+        field = QtWidgets.QDoubleSpinBox()
+        field.setDecimals(2)
+        field.setRange(-1000, 1000)
+        field.setSingleStep(0.01)
+        field.setSuffix(" m")
+        return field
 
     @staticmethod
     def number_field(minimum, maximum, value):
@@ -170,7 +179,8 @@ class StageSnapDock(QtWidgets.QDockWidget):
             deck = self.current_deck()
             document = App.ActiveDocument or App.newDocument("Buehnenplan")
             first_object = not document.Objects
-            placement = seed_placement(deck, self.x.value(), self.y.value(), self.z.value(),
+            placement = seed_placement(deck, self.x.value() * 1000, self.y.value() * 1000,
+                                       self.z.value() * 1000,
                                        self.rotation.currentIndex())
             obj = insert_deck(document, deck, placement, plan_view=is_plan_view(document))
             if first_object:
@@ -188,7 +198,7 @@ class StageSnapDock(QtWidgets.QDockWidget):
         view = active_3d_view()
         if document is None or view is None or not any(is_deck(obj) for obj in document.Objects):
             self.stop_snap()
-            self.status.setText("Setze zuerst ein BühnenSnap-Podest im aktuellen Plan.")
+            self.status.setText("Setze zuerst ein Podest im aktuellen Plan.")
             return
         try:
             self.view = view

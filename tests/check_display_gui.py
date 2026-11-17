@@ -38,6 +38,13 @@ def assert_rendered(document, source, mode):
     assert not source.StageSnap3DTemplate.Visibility
     assert not source.StageSnapPlanTemplate.Visibility
     assert bool(source.Shape.Solids) == (mode == "3D")
+    from freecad.buehnensnap.appearance import wood_faces
+    template = source.LinkedObject
+    wood = wood_faces(template.Shape, mode == "2D")
+    materials = template.ViewObject.ShapeAppearance
+    for index, material in enumerate(materials):
+        specular = material.SpecularColor[:3]
+        assert (max(specular) == 0.0) == (index in wood), "wood matte; aluminium shiny"
 
 
 document = App.newDocument("UnifiedGuiCheck")

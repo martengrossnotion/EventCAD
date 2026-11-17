@@ -18,7 +18,7 @@ class PodestCommand:
     def GetResources(self):
         return {
             "Pixmap": PODEST_ICON,
-            "MenuText": "BühnenSnap · Podeste",
+            "MenuText": "Podest",
             "ToolTip": "Podestbibliothek öffnen und Podeste aneinander andocken",
         }
 
@@ -67,3 +67,4 @@ class ViewModeCommand:
         document, view = App.ActiveDocument, active_3d_view()
         if document is not None and view is not None:
             show_mode(document, view, self.mode)
+

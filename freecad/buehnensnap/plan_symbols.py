@@ -113,7 +113,8 @@ def _read_variants(path, modified_ns, size):
                 if hasattr(root, "Shape") and not root.Shape.isNull():
                     shape = root.Shape.copy()
                     shape.Placement = global_placement(root)
-                    result[name] = Part.Compound([shape])
+                    materials = tuple(root.ViewObject.ShapeAppearance) if App.GuiUp else ()
+                    result[name] = (Part.Compound([shape]), materials)
                 else:
                     raise ValueError(f"{name} muss ein Objekt mit fertiger Shape sein.")
             return result
@@ -133,7 +134,7 @@ def load_variant_shape(path, variant):
         if variant == "Symbol2D" and not variants:
             return _read_plan_shape(str(path), revision.st_mtime_ns, revision.st_size).copy()
         raise ValueError(f"FCStd-Symbol {path.name}: Objekt {variant} fehlt.")
-    shape = variants[variant].copy()
+    shape = variants[variant][0].copy()
     if not shape.isValid():
         raise ValueError(f"{variant} enthält ungültige Geometrie.")
     if variant == "Symbol3D" and not shape.Solids:
@@ -141,4 +142,12 @@ def load_variant_shape(path, variant):
     if variant == "Symbol2D" and (shape.Solids or shape.BoundBox.ZLength > 0.01):
         raise ValueError("Symbol2D muss flach und parallel zur XY-Ebene liegen.")
     return shape
+
+
+def load_variant_appearance(path, variant):
+    """Use the same file-revision cache as the geometry, retaining face order."""
+    path = Path(path)
+    revision = path.stat()
+    variants = _read_variants(str(path), revision.st_mtime_ns, revision.st_size)
+    return list(variants[variant][1]) if variant in variants else []
 

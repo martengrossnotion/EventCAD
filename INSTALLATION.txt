@@ -1,4 +1,4 @@
-EventCAD 1.8.0 – Event-Arbeitsbereich für FreeCAD
+EventCAD 1.9.0 – Event-Arbeitsbereich für FreeCAD
 
 Voraussetzung: FreeCAD 1.0 oder neuer.
 

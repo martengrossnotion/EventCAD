@@ -1,6 +1,6 @@
 # EventCAD
 
-FreeCAD-Add-on für Veranstaltungsplanung. Der Arbeitsbereich **Event** bietet BühnenSnap zum Platzieren und Andocken von Bühnenpodesten sowie umschaltbare 2D- und 3D-Darstellungen. Voraussetzung: FreeCAD 1.0 oder neuer.
+FreeCAD-Add-on für Veranstaltungsplanung. Der Arbeitsbereich **Event** bietet Podest zum Platzieren und Andocken von Bühnenpodesten sowie umschaltbare 2D- und 3D-Darstellungen. Voraussetzung: FreeCAD 1.0 oder neuer.
 
 ## Installation und Update
 
@@ -11,9 +11,9 @@ Manuell: **Code → Download ZIP**, entpacken und den Add-on-Ordner nach `Mod` i
 ## Bedienung
 
 1. Öffne oder erstelle einen Plan und wähle den Arbeitsbereich **Event**.
-2. Öffne über das Podest-Icon das BühnenSnap-Bedienfeld.
+2. Öffne über das Podest-Icon das Podest-Bedienfeld.
 3. Wähle **Podestsystem** und **Plansymbol**. Unter **Planungsmaß → Eigenes Maß** kannst du Länge, Breite und Körperhöhe frei eingeben.
-4. Setze ein Startpodest über **Podest an Koordinaten setzen**. X/Y bezeichnen die Mitte, Z die Oberkante. **Drehung** wählt 0° hochkant oder 90° quer.
+4. Setze ein Startpodest über **Podest an Koordinaten setzen**. X/Y bezeichnen die Mitte, Z die Oberkante. Die Platzierungskoordinaten werden in Metern mit zwei Nachkommastellen eingegeben (z. B. 1,25 m); Längen, Breiten und Körperhöhen bleiben in Millimetern. **Drehung** wählt 0° hochkant oder 90° quer.
 5. Aktiviere **Autosnap starten** und klicke knapp innerhalb der gewünschten Kante und Ecke eines vorhandenen Podests. Bei einer Kollision wird die andere Ecke derselben Kante versucht. Sind beide Positionen belegt, bleibt der Plan unverändert.
 
 **2D-Grundriss** zeigt die flachen Symbole auf Höhe der Podestoberkante. **3D-Modell** zeigt die Volumenkörper. Der Modus wird im Plan gespeichert. Autosnap funktioniert in beiden Ansichten; die Zielkanten müssen parallel zu den X-/Y-Achsen des Plans liegen.
@@ -40,7 +40,7 @@ Beispiel: `buetec-standard/2000x1000/2000x1000.FCStd` enthält `Symbol3D` und `S
 3. Erstelle oder bearbeite das flache Objekt und benenne es eindeutig **Symbol2D**. Zeichne 1:1 in Millimetern, parallel zur XY-Ebene. Eine TechDraw-Seite ist keine Symbolgeometrie.
 4. Richte Länge in X, Breite in Y und Höhe in Z aus. Die 2D-Grundfläche muss den X-/Y-Abmessungen des 3D-Modells entsprechen. Bei Katalogmodellen muss das Modell das Katalogmaß einhalten. Der höchste Punkt des 3D-Modells gilt als Oberkante; Füße dürfen nach unten reichen. Beide Varianten werden am minimalen X/Y ausgerichtet, das 2D-Symbol auf Oberkantenhöhe gesetzt.
 5. Speichere die Datei. Belasse genau eine FCStd-Datei im Symbolordner. Speichere Sicherungskopien mit Endung .FCStd außerhalb dieses Ordners.
-6. Öffne BühnenSnap erneut, um zusätzliche Symbolordner einzulesen. Platziere das bearbeitete Symbol neu. Für zusätzliche Modelle werden die Planungsmaße aus der 3D-Geometrie ermittelt.
+6. Öffne Podest erneut, um zusätzliche Symbolordner einzulesen. Platziere das bearbeitete Symbol neu. Für zusätzliche Modelle werden die Planungsmaße aus der 3D-Geometrie ermittelt.
 
 Die mitgelieferten 3D-Objekte wurden vorläufig aus den bisherigen STEP-Dateien übernommen. Sie sind statische Part-Geometrien ohne ursprüngliche Konstruktionshistorie. Die Originalkonstruktion kann später in derselben FCStd-Datei ergänzt werden.
 
@@ -66,3 +66,9 @@ Fehlt bei einem alten Plan die Quelldatei oder ist sie ungültig, bleibt der ein
 
 Mit FreeCADs Python-Bibliotheken: `python -m unittest discover -s tests -v`. Falls bereits ein anderes EventCAD installiert ist, muss zum Testen dieses Checkouts dessen Pfad im Python-Namensraum `freecad` Vorrang haben; bereits geladene `freecad.buehnensnap`-Module müssen entfernt werden.
 
+
+## Materialien der Symbole
+
+Die FCStd-Symbole speichern ihre Flächenmaterialien: Holzdeck in der bisherigen braunen Farbe, matt; Aluminiumrahmen und Eckteile grau und glänzend. Beim Einfügen bleiben die Materialien einschließlich der Flächenzuordnung erhalten. Beim detaillierten Bütec-Modell gehören auch die senkrechten Kanten der Holzplatte zum matten Deck. Die vereinfachten Quadersymbole verwenden braune, matte horizontale Flächen und graue, glänzende Seiten.
+
+Bereits platzierte Symbole behalten die in ihrem Plan gespeicherten Materialien. Für die aktualisierten Bibliotheksmaterialien die betreffenden Podeste neu einsetzen.
