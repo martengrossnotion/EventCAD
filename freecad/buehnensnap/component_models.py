@@ -149,6 +149,57 @@ def _project_contours(shape, top):
     return result
 
 
+def _top_faces(shape):
+    if shape.isNull():
+        return []
+    top = shape.BoundBox.ZMax
+    return [face for face in shape.Faces
+            if face.BoundBox.ZLength < 1e-7 and abs(face.BoundBox.ZMax - top) < 1e-7
+            and face.normalAt(0, 0).z > 1 - 1e-7]
+
+
+def deck_surface(shape, top):
+    """Copy the actual upper plate faces, including their holes and cutouts."""
+    faces = _top_faces(shape)
+    if not faces:
+        return Part.Shape()
+    result = Part.Compound([face.copy() for face in faces])
+    result.translate(App.Vector(0, 0, top - result.BoundBox.ZMax))
+    return result
+
+
+def fill_plan_contours(shape):
+    """Make closed legacy plate contours pickable without changing their outline.
+
+    Explicit open lines are retained. FaceMakerBullseye also preserves nested
+    holes and disconnected islands instead of replacing them with a rectangle.
+    """
+    if shape.isNull() or shape.Faces or not shape.Edges or shape.BoundBox.ZLength > 0.01:
+        return shape
+    closed, open_edges = [], []
+    try:
+        for edges in Part.sortEdges(shape.Edges):
+            wire = Part.Wire(edges)
+            if wire.isClosed():
+                closed.append(wire)
+            else:
+                open_edges.extend(edges)
+        if not closed:
+            return shape
+        surface = Part.makeFace(closed, 'Part::FaceMakerBullseye')
+        if surface.isNull() or not surface.isValid() or not surface.Faces:
+            return shape
+        return Part.Compound([surface, *open_edges])
+    except Part.OCCError:
+        return shape
+
+
+def deck_surface_materials(plan, source, source_materials):
+    faces = _top_faces(source)
+    existing = _face_materials(Part.Compound(faces), source, source_materials) if faces else []
+    return _materials(plan, 'PedestalDeck', existing)
+
+
 def component_specs(deck, model_path=None):
     """Return all six roles as (shape3d, shape2d, materials3d, materials2d).
 
@@ -213,9 +264,16 @@ def component_specs(deck, model_path=None):
                                         deck.depth - plan_bounds.ZMin))
             shape2d = Part.Compound([shape2d])
             existing2d = load_variant_appearance(model_path, "Symbol2D") if model_path else []
+        elif role == 'PedestalDeck':
+            shape2d = deck_surface(shape3d, deck.depth)
+            if shape2d.isNull():
+                shape2d = _project_contours(shape3d, deck.depth)
+            existing2d = _face_materials(Part.Compound(_top_faces(shape3d)), shape3d, materials3d)
         else:
             shape2d = _project_contours(shape3d, deck.depth)
             existing2d = []
+        if role == 'PedestalDeck':
+            shape2d = fill_plan_contours(shape2d)
         materials2d = _materials(shape2d, role, existing2d)
         result[role] = (shape3d, shape2d, materials3d, materials2d)
     return result

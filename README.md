@@ -18,6 +18,8 @@ Manuell: **Code → Download ZIP**, entpacken und den Add-on-Ordner nach `Mod` i
 
 **2D-Grundriss** zeigt die flachen Symbole auf Höhe der Podestoberkante. **3D-Modell** zeigt die Volumenkörper. Der Modus wird im Plan gespeichert. Autosnap funktioniert in beiden Ansichten; die Zielkanten müssen parallel zu den X-/Y-Achsen des Plans liegen.
 
+Im 2D-Grundriss ist die Podestplatte eine anklickbare Fläche. Für Autosnap innerhalb dieser Fläche nahe der gewünschten Kante und Ecke klicken; Rahmenkanten müssen dafür nicht getroffen werden. Platte, Rahmen und Ecken bleiben über ihre eigenen View-Schalter getrennt sichtbar. Die automatisch erzeugte Plattenfläche verwendet den tatsächlichen oberen Umriss der Platte einschließlich vorhandener Aussparungen.
+
 ## Eine FCStd-Datei pro Symbol
 
 Unter `freecad/buehnensnap/resources/models/<System>/<Symbol>/` liegt pro Symbol genau **eine .FCStd-Datei**. Dateiname und Groß-/Kleinschreibung der Endung sind beliebig. Das Dropdown zeigt die Symbolordner des gewählten Systems; bekannte Kataloggrößen werden als Maß angezeigt. Mehrere FCStd-Dateien im selben Symbolordner führen zu einer Warnung; der Ordner wird übersprungen. STEP-Dateien werden nicht mehr als Bibliotheksmodelle verwendet.
@@ -70,7 +72,7 @@ Bereits das erste Startpodest erhält eine eigene Podestfläche. Per Autosnap od
 
 ## Komponenten in der Symboldatei
 
-Für eindeutig bearbeitbare Komponenten können in der FCStd-Datei zusätzlich zu Symbol3D/Symbol2D die fertigen Objekte CornerTL, CornerTR, CornerBL, CornerBR, PedestalFrame und PedestalDeck angelegt werden. Namen oder eindeutige Labels werden erkannt. Alle Teile verwenden dasselbe Koordinatensystem wie Symbol3D; T steht für die positive Y-Seite, L für die negative X-Seite. Optionale flache Varianten heißen beispielsweise PedestalDeck2D oder CornerTL2D. Ohne eigene 2D-Komponente wird deren Kontur aus der vorhandenen 3D-Geometrie projiziert.
+Für eindeutig bearbeitbare Komponenten können in der FCStd-Datei zusätzlich zu Symbol3D/Symbol2D die fertigen Objekte CornerTL, CornerTR, CornerBL, CornerBR, PedestalFrame und PedestalDeck angelegt werden. Namen oder eindeutige Labels werden erkannt. Alle Teile verwenden dasselbe Koordinatensystem wie Symbol3D; T steht für die positive Y-Seite, L für die negative X-Seite. Optionale flache Varianten heißen beispielsweise PedestalDeck2D oder CornerTL2D. Ohne eigene 2D-Komponente wird bei der Platte die obere horizontale Fläche übernommen; Rahmen und Ecken erhalten projizierte Konturen. Geschlossene reine Plattenkonturen werden zu anklickbaren Flächen ergänzt. Löcher, getrennte Teilflächen und zusätzliche offene Detaillinien bleiben erhalten; eigene offene Linien werden nicht durch eine erfundene Rechteckfläche ersetzt.
 
 Das vorhandene detaillierte Bütec-Modell wird anhand seiner sechs vorhandenen Volumenkörper in Deck, Rahmen und vier Ecken zerlegt. Es werden keine neuen Volumenkörper erfunden. Vereinfachte Gesamtmodelle ohne getrennte Bauteile bleiben vollständig unter PedestalDeck. Ihre übrigen fünf Einträge sind leere Platzhalter und bleiben unsichtbar; die Baumstruktur ist trotzdem identisch. Für getrennt schaltbare Rahmen/Ecken benötigen solche Modelle entsprechende echte Komponenten.
 
@@ -83,6 +85,8 @@ Die zusätzlichen Gruppen und Links erhöhen die Zahl der Dokumentobjekte. Es gi
 Für Skripte liefert segments.segment_shape(segment) die zusammengesetzte Weltgeometrie jedes Bauteils genau einmal. Die automatisch erzeugte App::Part.Shape kann normale Untergruppen und ihre ebenfalls im geometrischen Container registrierten Links doppelt aufzählen; sie sollte deshalb nicht für Mengen-/Volumensummen verwendet werden.
 
 ## Bestehende Pläne
+
+Version 2.1.1 ergänzt bereits eingebettete, geschlossene 2D-Plattenkonturen beim Öffnen oder Ansichtswechsel zu anklickbaren Flächen. Dafür ist keine Quelldatei nötig. Die Korrektur erhält Umrisse, Löcher, Verknüpfungen, Platzierungen und Sichtbarkeit und verändert keine Rahmen-, Eck- oder 3D-Vorlagen.
 
 Segmentpläne aus Version 2.0 werden beim Öffnen mit geladenem Addon oder beim ersten Ansichts-/Viewwechsel auf die Untergruppensteuerung umgestellt. Die Ordner behalten ihre internen Namen und Bezeichnungen; Geometrieobjekte, Cut-Verknüpfungen und Weltpositionen bleiben erhalten. Die drei leeren Zubehörgruppen werden dabei ergänzt. Bereits offene Dokumente werden beim Laden des Segmentmoduls ebenfalls berücksichtigt. Die Änderung wird mit dem normalen Speichern des Plans dauerhaft übernommen.
 
