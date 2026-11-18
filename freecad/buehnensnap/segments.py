@@ -8,6 +8,9 @@ from .plan_symbols import global_placement
 
 ROLES = ('CornerTL', 'CornerTR', 'CornerBL', 'CornerBR', 'PedestalFrame', 'PedestalDeck')
 CATEGORIES = {'Corners': ROLES[:4], 'Frames': ('PedestalFrame',), 'Decks': ('PedestalDeck',)}
+GROUPS = (('Corners', 'Corners', 'Corners'), ('Frame', 'Frame', 'Frames'),
+          ('Deck', 'Deck', 'Decks'), ('Verbinder', 'Verbinder', 'Connectors'),
+          ('Steckfuesse', 'Steckfüße', 'Legs'), ('Gelaender', 'Geländer', 'Railings'))
 _updating = 0
 _observer = None
 
@@ -41,17 +44,43 @@ def segment_from_pick(obj):
     if is_segment(obj):
         return obj
     owner = getattr(obj, 'StageSnapOwner', None) if obj is not None else None
-    return owner if is_segment(owner) else None
+    if is_segment(owner):
+        return owner
+    # Edited results and newly added accessories need no EventCAD properties.
+    parent = obj.getParentGeoFeatureGroup() if obj is not None else None
+    while parent is not None:
+        if is_segment(parent):
+            return parent
+        parent = parent.getParentGeoFeatureGroup()
+    return None
 
 
 def segment_area(segment):
     return getattr(segment, 'StageSnapArea', None)
 
 
+def segment_groups(segment):
+    return [obj for obj in segment.Group
+            if getattr(obj, 'StageSnapOwner', None) == segment
+            and hasattr(obj, 'StageSnapGroupRole')]
+
+
 def components(segment):
-    return [child for group in segment.Group if group.TypeId == 'App::DocumentObjectGroup'
-            for child in getattr(group, 'Group', ())
-            if getattr(child, 'StageSnapOwner', None) == segment]
+    result, seen = [], set()
+
+    def collect(group):
+        for obj in getattr(group, 'Group', ()):
+            if obj.Name in seen:
+                continue
+            seen.add(obj.Name)
+            if (obj.TypeId == 'App::Link' and getattr(obj, 'StageSnapOwner', None) == segment
+                    and getattr(obj, 'StageSnapRole', None) in ROLES):
+                result.append(obj)
+            elif hasattr(obj, 'Group'):
+                collect(obj)
+
+    collect(segment)
+    return result
 
 
 def segment_shape(segment):
@@ -70,35 +99,33 @@ def segment_shape(segment):
 
 
 def controls(area):
+    if area is None:
+        return []
     views = next((obj for obj in area.Group if obj.Label == 'Views'
                   and getattr(obj, 'StageSnapViews', False)), None)
     return list(views.Group) if views is not None else []
 
 
 def apply_visibility(segment):
-    if not App.GuiUp:
-        return
     enabled = {obj.StageSnapViewRole: obj.Enabled for obj in controls(segment_area(segment))}
     with updating():
-        for obj in components(segment):
-            category = next(key for key, roles in CATEGORIES.items() if obj.StageSnapRole in roles)
-            template = obj.LinkedObject
-            available = template is not None and not template.Shape.isNull()
-            obj.ViewObject.Visibility = bool(obj.StageSnapUserVisible
-                                              and enabled.get(category, True) and available)
+        for group in segment_groups(segment):
+            group.Visibility = bool(group.StageSnapUserVisible
+                                    and enabled.get(group.StageSnapGroupRole, True))
 
 
 class VisibilityControl:
     def onChanged(self, obj, prop):
-        if prop != 'Enabled' or _updating or not hasattr(obj, 'Members'):
+        if (prop != 'Enabled' or _updating or obj.Document.Restoring
+                or not hasattr(obj, 'Members')):
             return
-        if App.GuiUp:
-            with updating():
-                obj.ViewObject.Visibility = obj.Enabled
-        owners = {member.StageSnapOwner for member in obj.Members
-                  if getattr(member, 'StageSnapOwner', None) is not None}
-        for owner in owners:
-            apply_visibility(owner)
+        # Older saved controls still reference component links.
+        if any(not hasattr(member, 'StageSnapGroupRole') for member in obj.Members):
+            migrate_document(obj.Document)
+        with updating():
+            obj.Visibility = obj.Enabled
+            for group in obj.Members:
+                group.Visibility = bool(obj.Enabled and group.StageSnapUserVisible)
 
     def execute(self, obj):
         pass
@@ -139,25 +166,198 @@ class VisibilityControlView:
 
 
 class ComponentVisibilityObserver:
-    def slotChangedObject(self, view, prop):
-        if _updating or prop != 'Visibility':
-            return
-        try:
-            obj = view.Object
-        except (ReferenceError, RuntimeError):
+    def slotActivateDocument(self, document):
+        # FreeCAD 1.0 exposes no Python document-restored observer callback.
+        # Its final activation happens after both document and GUI restoration.
+        if not _updating and not document.Restoring:
+            migrate_document(document)
+
+    def slotBeforeRecomputeDocument(self, document):
+        # Also cover hidden/headless documents, which need not be activated.
+        if not _updating and not document.Restoring and any(
+                is_segment(obj) and len(segment_groups(obj)) != len(GROUPS)
+                for obj in document.Objects):
+            migrate_document(document)
+
+    def slotChangedObject(self, obj, prop):
+        if _updating or prop != 'Visibility' or obj.Document.Restoring:
             return
         if getattr(obj, 'StageSnapOwner', None) is not None and hasattr(obj, 'StageSnapUserVisible'):
             with updating():
-                obj.StageSnapUserVisible = view.Visibility
-            apply_visibility(obj.StageSnapOwner)
+                obj.StageSnapUserVisible = obj.Visibility
+            if hasattr(obj, 'StageSnapGroupRole'):
+                apply_visibility(obj.StageSnapOwner)
 
 
 def install_observer():
     global _observer
-    if App.GuiUp and _observer is None:
-        import FreeCADGui as Gui
+    if _observer is None:
         _observer = ComponentVisibilityObserver()
-        Gui.addDocumentObserver(_observer)
+        App.addDocumentObserver(_observer)
+
+
+class SegmentGroupView:
+    """Native geometric group: one scene mask, independent child visibility.
+
+    A normal DocumentObjectGroup propagates show/hide to every child. The
+    geometric group extension instead hides its scene subtree as a whole.
+    GeometryPython supplies a placement without adding an Origin per folder.
+    """
+
+    def attach(self, view):
+        if not view.hasExtension('Gui::ViewProviderGeoFeatureGroupExtension'):
+            view.addExtension('Gui::ViewProviderGeoFeatureGroupExtensionPython')
+
+    def getIcon(self):
+        return ':/icons/Group.svg'
+
+    def getDefaultDisplayMode(self):
+        return 'Group'
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        pass
+
+
+def new_segment_group(segment, name, label, role):
+    document = segment.Document
+    group = document.addObject('App::GeometryPython', name)
+    group.addExtension('App::GeoFeatureGroupExtensionPython')
+    exact_label(group, label)
+    group.addProperty('App::PropertyLinkHidden', 'StageSnapOwner', 'Podest')
+    group.StageSnapOwner = segment
+    group.addProperty('App::PropertyString', 'StageSnapGroupRole', 'Podest')
+    group.StageSnapGroupRole = role
+    group.addProperty('App::PropertyBool', 'StageSnapUserVisible', 'Podest')
+    group.StageSnapUserVisible = True
+    for prop in ('StageSnapOwner', 'StageSnapGroupRole'):
+        group.setEditorMode(prop, 2)
+    group.setEditorMode('Placement', 1)
+    segment.addObject(group)
+    if App.GuiUp:
+        group.ViewObject.Proxy = SegmentGroupView()
+    return group
+
+
+def _reference_value(value, old, replacement):
+    if value is old:
+        return replacement
+    if isinstance(value, list):
+        return [_reference_value(item, old, replacement) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_reference_value(item, old, replacement) for item in value)
+    return value
+
+
+def _migrate_group(segment, old, role):
+    """Replace only a folder, retaining geometry, names, links and placements."""
+    document = segment.Document
+    name, label, label2 = old.Name, old.Label, old.Label2
+    children, visible = list(old.Group), old.Visibility
+    # Keep the internal name so expressions referencing the folder still work.
+    # Parent Group lists are rebuilt separately: their old flattened geometry
+    # entries must not move children out of the new geometric container again.
+    reference_token = object()
+    references, expressions = [], []
+    reserved = {'ExpressionEngine', 'Group', 'Label', 'Label2', 'Visibility', '_GroupTouched',
+                'Placement', 'StageSnapOwner', 'StageSnapGroupRole', 'StageSnapUserVisible'}
+    properties = []
+    for prop in old.PropertiesList:
+        if prop not in reserved:
+            prop_type = old.getTypeIdOfProperty(prop)
+            choices = old.getEnumerationsOfProperty(prop) if prop_type == 'App::PropertyEnumeration' else None
+            properties.append((prop_type, prop, old.getGroupOfProperty(prop),
+                               old.getDocumentationOfProperty(prop),
+                               _reference_value(getattr(old, prop), old, reference_token),
+                               old.getEditorMode(prop), choices))
+    own_expressions = list(old.ExpressionEngine)
+    show_in_tree = old.ViewObject.ShowInTree if App.GuiUp else True
+    for source in old.InList:
+        if source == old:
+            continue
+        for prop in source.PropertiesList:
+            if prop != 'Group' and 'Link' in source.getTypeIdOfProperty(prop):
+                value = getattr(source, prop)
+                references.append((source, prop, _reference_value(value, old, reference_token)))
+        expressions.extend((source, path, expression) for path, expression in source.ExpressionEngine)
+    old.Group = []
+    document.removeObject(name)
+    group = new_segment_group(segment, name, label, role)
+    group.Label2 = label2
+    group.StageSnapUserVisible = visible
+    for prop_type, prop, section, description, value, editor_mode, choices in properties:
+        group.addProperty(prop_type, prop, section, description)
+        if choices is not None:
+            setattr(group, prop, choices)
+        setattr(group, prop, _reference_value(value, reference_token, group))
+        group.setEditorMode(prop, editor_mode)
+    for path, expression in own_expressions:
+        group.setExpression(path, expression)
+    if App.GuiUp:
+        group.ViewObject.ShowInTree = show_in_tree
+    for child in children:
+        placement = global_placement(child) if hasattr(child, 'Placement') else None
+        group.addObject(child)
+        if placement is not None:
+            child.Placement = global_placement(group).inverse() * placement
+        # Old view filters wrote Enabled into each link. Recover its real
+        # individual state before replacing that behavior with a parent mask.
+        if (getattr(child, 'StageSnapOwner', None) == segment
+                and hasattr(child, 'StageSnapUserVisible') and child.TypeId == 'App::Link'):
+            child.Visibility = child.StageSnapUserVisible
+    for source, prop, value in references:
+        setattr(source, prop, _reference_value(value, reference_token, group))
+    for source, path, expression in expressions:
+        source.setExpression(path, expression)
+    return group
+
+
+def ensure_segment_groups(segment):
+    ordered = []
+    for name, label, role in GROUPS:
+        group = next((obj for obj in segment_groups(segment)
+                      if obj.StageSnapGroupRole == role), None)
+        if group is None:
+            old = next((obj for obj in segment.Group
+                        if obj.TypeId == 'App::DocumentObjectGroup' and obj.Label == label), None)
+            if old is None and role in CATEGORIES:
+                old = next((obj for obj in segment.Group if obj.TypeId == 'App::DocumentObjectGroup'
+                            and any(getattr(child, 'StageSnapOwner', None) == segment
+                                    and getattr(child, 'StageSnapRole', None) in CATEGORIES[role]
+                                    for child in obj.Group)), None)
+            group = _migrate_group(segment, old, role) if old is not None else new_segment_group(
+                segment, name, label, role)
+        if App.GuiUp and not group.ViewObject.hasExtension('Gui::ViewProviderGeoFeatureGroupExtension'):
+            group.ViewObject.Proxy = SegmentGroupView()
+        ordered.append(group)
+    desired = [*ordered, *[obj for obj in segment.Group if obj not in ordered]]
+    if list(segment.Group) != desired:
+        segment.Group = desired
+
+
+def refresh_members(area):
+    if area is None:
+        return
+    segments = [obj for obj in area.Group if is_segment(obj)]
+    for control in controls(area):
+        members = [group for segment in segments for group in segment_groups(segment)
+                   if group.StageSnapGroupRole == control.StageSnapViewRole]
+        if list(control.Members) != members:
+            control.Members = members
+
+
+def migrate_document(document):
+    """Upgrade v2.0 folders lazily/on restore; never replace their geometry."""
+    placed = [obj for obj in document.Objects if is_segment(obj)]
+    with updating():
+        for segment in placed:
+            ensure_segment_groups(segment)
+        for area in {segment_area(segment) for segment in placed} - {None}:
+            refresh_members(area)
+        for segment in placed:
+            apply_visibility(segment)
 
 
 def new_group(document, name, parent, label=None):
@@ -252,20 +452,30 @@ def component_templates(document, deck):
 
 def set_segment_mode(segment, plan_view):
     with updating():
+        ensure_segment_groups(segment)
+        refresh_members(segment_area(segment))
         for obj in components(segment):
             target = obj.StageSnapPlanTemplate if plan_view else obj.StageSnap3DTemplate
             if obj.LinkedObject != target:
                 placement = obj.Placement.copy()
+                visible = obj.Visibility
                 obj.setLink(target)
                 obj.LinkTransform = False
                 obj.Placement = placement
+                obj.Visibility = visible
         segment.StageSnapPlanView = plan_view
     apply_visibility(segment)
 
 
 def create_segment(document, deck, placement, plan_view=False, target=None):
-    from .decks import DECK_KIND, area_for_snap
     install_observer()
+    with updating():
+        migrate_document(document)
+        return _create_segment(document, deck, placement, plan_view, target)
+
+
+def _create_segment(document, deck, placement, plan_view, target):
+    from .decks import DECK_KIND, area_for_snap
     templates = component_templates(document, deck)
     area = area_for_snap(document, target) if target is not None else create_area(document)
     ensure_views(area)
@@ -297,10 +507,9 @@ def create_segment(document, deck, placement, plan_view=False, target=None):
     if App.GuiUp:
         segment.Origin.ViewObject.ShowInTree = False
     with updating():
-        for label, roles in [('Corners', ROLES[:4]), ('Frame', ('PedestalFrame',)),
-                              ('Deck', ('PedestalDeck',))]:
-            group = new_group(document, label, segment)
-            for role in roles:
+        for name, label, category in GROUPS:
+            group = new_segment_group(segment, name, label, category)
+            for role in CATEGORIES.get(category, ()):
                 obj = document.addObject('App::Link', role)
                 exact_label(obj, role)
                 obj.setLink(templates[role, 'Symbol3D'])
@@ -314,17 +523,19 @@ def create_segment(document, deck, placement, plan_view=False, target=None):
                 obj.setEditorMode('StageSnapRole', 2)
                 obj.addProperty('App::PropertyBool', 'StageSnapUserVisible', 'Podest')
                 obj.StageSnapUserVisible = True
+                obj.Visibility = True
                 for prop, variant in [('StageSnap3DTemplate', 'Symbol3D'),
                                       ('StageSnapPlanTemplate', 'Symbol2D')]:
                     obj.addProperty('App::PropertyLinkGlobal', prop, 'Podest')
                     setattr(obj, prop, templates[role, variant])
                     obj.setEditorMode(prop, 2)
                 obj.setEditorMode('Placement', 1)
-        for control in controls(area):
-            control.Members = [*control.Members, *[obj for obj in components(segment)
-                               if obj.StageSnapRole in CATEGORIES[control.StageSnapViewRole]]]
+        refresh_members(area)
     set_segment_mode(segment, plan_view)
     return segment
 
 
 install_observer()
+for _document in list(App.listDocuments().values()):
+    if not _document.Restoring:
+        migrate_document(_document)
