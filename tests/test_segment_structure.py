@@ -17,7 +17,8 @@ def by_label(parent, label):
 def components(segment):
     # App::Part includes nested geometric children in Group as well. The tree
     # claims those through their document groups, so inspect that hierarchy.
-    return [obj for group in segment.Group if hasattr(group, "Group") for obj in group.Group]
+    return [obj for group in segment.Group if hasattr(group, "Group") for obj in group.Group
+            if getattr(obj, "StageSnapOwner", None) == segment and obj.TypeId == "App::Link"]
 
 
 class SegmentStructureTest(unittest.TestCase):
@@ -53,11 +54,19 @@ class SegmentStructureTest(unittest.TestCase):
         self.assertTrue(all(obj.Enabled for obj in views.Group))
         self.assertEqual(segment.TypeId, "App::Part")
         self.assertEqual([obj.Label for obj in segment.Group if hasattr(obj, "Group")],
-                         ["Corners", "Frame", "Deck"])
+                         ["Corners", "Frame", "Deck", "Verbinder", "Steckfüße", "Geländer"])
         self.assertEqual([obj.Label for obj in by_label(segment, "Corners").Group],
                          ["CornerTL", "CornerTR", "CornerBL", "CornerBR"])
         self.assertEqual([obj.Label for obj in by_label(segment, "Frame").Group], ["PedestalFrame"])
         self.assertEqual([obj.Label for obj in by_label(segment, "Deck").Group], ["PedestalDeck"])
+        for label, category in (("Deck", "Decks"), ("Frame", "Frames"), ("Corners", "Corners")):
+            group = by_label(segment, label)
+            self.assertTrue(group.hasExtension("App::GeoFeatureGroupExtension"))
+            self.assertEqual(by_label(views, "View" + category).Members, [group])
+        for label in ("Verbinder", "Steckfüße", "Geländer"):
+            group = by_label(segment, label)
+            self.assertTrue(group.hasExtension("App::GeoFeatureGroupExtension"))
+            self.assertEqual(group.Group, [])
         self.assertNotIn("ReadOnly", segment.getEditorMode("Placement"))
         for component in components(segment):
             self.assertEqual(component.TypeId, "App::Link")
@@ -82,7 +91,164 @@ class SegmentStructureTest(unittest.TestCase):
             self.assertEqual(obj.StageSnapPlanTemplate, original.StageSnapPlanTemplate)
             self.assertNotEqual(obj, original)
             self.assertEqual(obj.LinkedObject.Document, self.document)
+        views = by_label(segments.segment_area(first), "Views")
+        for label, category in (("Deck", "Decks"), ("Frame", "Frames"), ("Corners", "Corners")):
+            self.assertEqual(by_label(views, "View" + category).Members,
+                             [by_label(first, label), by_label(second, label)])
         self.assertFalse(any(obj.TypeId == "App::LinkPython" for obj in self.document.Objects))
+
+    def test_ordinary_geometry_belongs_to_its_container_without_member_metadata(self):
+        """Additional editable shapes must not be registered as link components."""
+        segment = self.insert()
+        deck_group = by_label(segment, "Deck")
+        control = by_label(by_label(segments.segment_area(segment), "Views"), "ViewDecks")
+        original_components = list(components(segment))
+        added = self.document.addObject("Part::Box", "EditedDeck")
+        deck_group.addObject(added)
+        self.document.recompute()
+        self.assertEqual(control.Members, [deck_group])
+        self.assertFalse(hasattr(added, "StageSnapOwner"))
+        self.assertEqual(components(segment), original_components)
+        self.assert_placement(global_placement(added), global_placement(segment) * added.Placement)
+        before = global_placement(added)
+        for plan_view in (True, False):
+            segments.set_segment_mode(segment, plan_view)
+            self.document.recompute()
+            self.assertIn(added, deck_group.Group)
+            self.assert_placement(global_placement(added), before)
+
+    def test_legacy_groups_migrate_without_moving_or_recreating_geometry(self):
+        """A saved pre-container segment keeps its geometry and world placement."""
+        import Part
+        document = self.document
+        area = segments.create_area(document)
+        parent = document.addObject("App::Part", "LegacyParent")
+        parent.Placement = App.Placement(App.Vector(800, -200, 60),
+                                         App.Rotation(App.Vector(0, 0, 1), 90))
+        parent.addObject(area)
+        segment = document.addObject("App::Part", "LegacySegment")
+        segment.addProperty("App::PropertyBool", "StageSnapSegment", "Podest")
+        segment.StageSnapSegment = True
+        segment.addProperty("App::PropertyBool", "StageSnapPlanView", "Podest")
+        segment.addProperty("App::PropertyLinkHidden", "StageSnapArea", "Podest")
+        segment.StageSnapArea = area
+        area.addObject(segment)
+        segment.Placement = App.Placement(App.Vector(300, 700, 200),
+                                          App.Rotation(App.Vector(0, 0, 1), 180))
+        template = document.addObject("Part::Feature", "LegacyTemplate")
+        template.Shape = Part.makeBox(800, 500, 90)
+        references = {}
+        for label, category in (("Corners", "Corners"), ("Frame", "Frames"), ("Deck", "Decks")):
+            group = document.addObject("App::DocumentObjectGroup", label)
+            segments.exact_label(group, label)
+            segment.addObject(group)
+            links = []
+            for role in segments.CATEGORIES[category]:
+                link = document.addObject("App::Link", role)
+                link.setLink(template)
+                link.LinkTransform = False
+                link.Placement = App.Placement(App.Vector(12, 24, 36), App.Rotation())
+                group.addObject(link)
+                link.addProperty("App::PropertyLinkHidden", "StageSnapOwner", "Podest")
+                link.StageSnapOwner = segment
+                link.addProperty("App::PropertyString", "StageSnapRole", "Podest")
+                link.StageSnapRole = role
+                link.addProperty("App::PropertyBool", "StageSnapUserVisible", "Podest")
+                link.StageSnapUserVisible = role != "CornerTL"
+                for prop in ("StageSnap3DTemplate", "StageSnapPlanTemplate"):
+                    link.addProperty("App::PropertyLinkGlobal", prop, "Podest")
+                    setattr(link, prop, template)
+                links.append(link)
+            by_label(by_label(area, "Views"), "View" + category).Members = links
+            references[label] = links
+        extra = document.addObject("Part::Box", "LegacyEditedDeck")
+        by_label(segment, "Deck").addObject(extra)
+        with segments.updating():
+            document.recompute()
+        retained = [template, extra, *[obj for links in references.values() for obj in links]]
+        placements = {obj.Name: global_placement(obj).copy() for obj in retained}
+        names = [obj.Name for obj in retained]
+
+        segments.migrate_document(document)
+        document.recompute()
+        self.assertEqual([obj.Label for obj in segment.Group if hasattr(obj, "Group")],
+                         ["Corners", "Frame", "Deck", "Verbinder", "Steckfüße", "Geländer"])
+        for obj, name in zip(retained, names):
+            self.assertEqual(document.getObject(name), obj)
+            self.assert_placement(global_placement(obj), placements[name])
+        for label, category in (("Deck", "Decks"), ("Frame", "Frames"), ("Corners", "Corners")):
+            group = by_label(segment, label)
+            self.assertTrue(group.hasExtension("App::GeoFeatureGroupExtension"))
+            self.assertEqual(by_label(by_label(area, "Views"), "View" + category).Members, [group])
+        self.assertIn(extra, by_label(segment, "Deck").Group)
+        for label in ("Verbinder", "Steckfüße", "Geländer"):
+            group = by_label(segment, label)
+            self.assertTrue(group.hasExtension("App::GeoFeatureGroupExtension"))
+            self.assertEqual(group.Group, [])
+        self.assertFalse(references["Corners"][0].StageSnapUserVisible)
+        all_names = [obj.Name for obj in document.Objects]
+        segments.migrate_document(document)
+        self.assertEqual([obj.Name for obj in document.Objects], all_names,
+                         "migration must be idempotent")
+
+    def test_renamed_legacy_folder_keeps_properties_expressions_and_incoming_links(self):
+        document = self.document
+        area = segments.create_area(document)
+        segment = document.addObject("App::Part", "LegacyCustomSegment")
+        segment.addProperty("App::PropertyBool", "StageSnapSegment", "Podest")
+        segment.StageSnapSegment = True
+        segment.addProperty("App::PropertyLinkHidden", "StageSnapArea", "Podest")
+        segment.StageSnapArea = area
+        area.addObject(segment)
+        group = document.addObject("App::DocumentObjectGroup", "LegacyCustomDeck")
+        segments.exact_label(group, "Mein zugeschnittenes Deck")
+        group.Label2 = "Werkstattvariante"
+        segment.addObject(group)
+        template = document.addObject("Part::Box", "CustomDeckTemplate")
+        source = document.addObject("App::Link", "CustomDeckLink")
+        source.setLink(template)
+        source.LinkTransform = False
+        source.addProperty("App::PropertyLinkHidden", "StageSnapOwner", "Podest")
+        source.StageSnapOwner = segment
+        source.addProperty("App::PropertyString", "StageSnapRole", "Podest")
+        source.StageSnapRole = "PedestalDeck"
+        group.addObject(source)
+        by_label(by_label(area, "Views"), "ViewDecks").Members = [source]
+        group.addProperty("App::PropertyLength", "UserLength", "Benutzerdaten")
+        group.UserLength = 12.5
+        group.addProperty("App::PropertyFloat", "UserFactor", "Benutzerdaten")
+        group.UserFactor = 3.0
+        group.addProperty("App::PropertyFloat", "ComputedFactor", "Benutzerdaten")
+        group.setExpression("ComputedFactor", "UserFactor * 2")
+        holder = document.addObject("App::FeaturePython", "ExternalFolderReference")
+        holder.addProperty("App::PropertyLink", "SelectedFolder", "Benutzerdaten")
+        holder.SelectedFolder = group
+        holder.addProperty("App::PropertyFloat", "ExternalFactor", "Benutzerdaten")
+        holder.setExpression("ExternalFactor", "LegacyCustomDeck.ComputedFactor + 1")
+        with segments.updating():
+            document.recompute()
+        original_name = group.Name
+        self.assertAlmostEqual(group.ComputedFactor, 6.0)
+        self.assertAlmostEqual(holder.ExternalFactor, 7.0)
+
+        segments.migrate_document(document)
+        document.recompute()
+        replacement = document.getObject(original_name)
+        self.assertTrue(replacement.hasExtension("App::GeoFeatureGroupExtension"))
+        self.assertEqual(replacement.Label, "Mein zugeschnittenes Deck")
+        self.assertEqual(replacement.Label2, "Werkstattvariante")
+        self.assertAlmostEqual(replacement.UserLength.Value, 12.5)
+        self.assertAlmostEqual(replacement.UserFactor, 3.0)
+        self.assertAlmostEqual(replacement.ComputedFactor, 6.0)
+        self.assertTrue(any(path == "ComputedFactor" for path, _ in replacement.ExpressionEngine))
+        self.assertEqual(holder.SelectedFolder, replacement)
+        self.assertAlmostEqual(holder.ExternalFactor, 7.0)
+        self.assertIn(source, replacement.Group)
+        self.assertEqual(by_label(by_label(area, "Views"), "ViewDecks").Members, [replacement])
+        replacement.UserFactor = 5.0
+        document.recompute()
+        self.assertAlmostEqual(replacement.ComputedFactor, 10.0)
+        self.assertAlmostEqual(holder.ExternalFactor, 11.0)
 
     def test_component_picks_resolve_to_the_single_segment(self):
         segment = self.insert()

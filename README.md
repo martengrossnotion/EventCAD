@@ -52,14 +52,19 @@ Neue Platzierungen verwenden folgende feste Reihenfolge und Bezeichnungen:
 | --- | --- |
 | Podestfläche 1 | Views, Podestsegment 001, Podestsegment 002, … |
 | Views | ViewDecks, ViewCorners, ViewFrames |
-| Podestsegment 001 | Corners, Frame, Deck |
+| Podestsegment 001 | Corners, Frame, Deck, Verbinder, Steckfüße, Geländer |
 | Corners | CornerTL, CornerTR, CornerBL, CornerBR |
 | Frame | PedestalFrame |
 | Deck | PedestalDeck |
+| Verbinder, Steckfüße, Geländer | zunächst leer, für eigene Bauteile |
 
 Jedes Segment ist ein App::Part mit genau einer gemeinsam bearbeitbaren Position und Drehung. Die sechs Komponenten sind native App::Link-Objekte. Ihre lokale Platzierung ist schreibgeschützt. Alle Komponenten folgen dem Segment auch beim Bearbeiten in 2D. Ein Klick auf eine Komponente wird für Autosnap ihrem Segment zugeordnet.
 
-ViewDecks, ViewCorners und ViewFrames sind Sichtbarkeitssteuerungen mit Referenzen auf die Komponenten ihrer eigenen Podestfläche. Sie erzeugen keine zweiten Geometrieobjekte und nehmen keine Bauteile aus den Segmentgruppen heraus. Umschalten mit der Leertaste oder über die Eigenschaft Enabled. Individuell ausgeblendete Bauteile bleiben beim Aus-/Einschalten einer Kategorie und beim 2D-/3D-Wechsel ausgeblendet.
+ViewDecks, ViewCorners und ViewFrames schalten die Untergruppen Deck, Corners und Frame ihrer eigenen Podestfläche. Ihre Members referenzieren diese Container, nicht die einzelnen Komponenten. Umschalten mit der Leertaste oder über die Eigenschaft Enabled. Die Untergruppen verwenden native geometrische Gruppen als gemeinsame Sichtbarkeitsmaske. Dadurch bleiben die individuellen Sichtbarkeitswerte aller enthaltenen Objekte erhalten; auch ein nachträglich hinzugefügter Cut oder ein eigenes Bauteil folgt seiner Untergruppe ohne zusätzliche Registrierung. Beispielsweise einen sichtbaren Cut unter Deck ablegen und dessen Ausgangsdeck sowie Schneidkörper ausgeblendet lassen: Aus-/Einschalten von ViewDecks erhält genau diese Auswahl.
+
+Die Untergruppen erscheinen weiterhin als Ordner und besitzen keine zusätzlichen Ursprungsobjekte. Ihre lokale Platzierung bleibt unverändert; das ganze Podest wird am Segment positioniert. Verbinder, Steckfüße und Geländer werden in jedem Segment als leere Untergruppen angelegt. Sie haben zunächst keine zusätzlichen globalen View-Schalter und lassen sich einzeln über ihren Ordner ein-/ausblenden. Die View-Steuerung erzeugt keine zweite Geometrie und verschiebt keine Bauteile aus ihren Segmenten.
+
+Der 2D-/3D-Wechsel erhält die Einzel-Sichtbarkeit und die Gruppenmasken. Er wechselt weiterhin die Vorlagen der ursprünglichen Komponentenlinks; für einen darauf aufgebauten Cut entsteht durch die Gruppensteuerung keine eigene angepasste 2D-Konstruktion.
 
 Bereits das erste Startpodest erhält eine eigene Podestfläche. Per Autosnap oder über das Zielsegment hinzugefügte Podeste gehören derselben Fläche an. Räumlich getrennte Startplatzierungen erhalten separate Flächen. Verschieben führt noch nicht zu automatischem Trennen oder Zusammenführen von Flächen.
 
@@ -78,6 +83,8 @@ Die zusätzlichen Gruppen und Links erhöhen die Zahl der Dokumentobjekte. Es gi
 Für Skripte liefert segments.segment_shape(segment) die zusammengesetzte Weltgeometrie jedes Bauteils genau einmal. Die automatisch erzeugte App::Part.Shape kann normale Untergruppen und ihre ebenfalls im geometrischen Container registrierten Links doppelt aufzählen; sie sollte deshalb nicht für Mengen-/Volumensummen verwendet werden.
 
 ## Bestehende Pläne
+
+Segmentpläne aus Version 2.0 werden beim Öffnen mit geladenem Addon oder beim ersten Ansichts-/Viewwechsel auf die Untergruppensteuerung umgestellt. Die Ordner behalten ihre internen Namen und Bezeichnungen; Geometrieobjekte, Cut-Verknüpfungen und Weltpositionen bleiben erhalten. Die drei leeren Zubehörgruppen werden dabei ergänzt. Bereits offene Dokumente werden beim Laden des Segmentmoduls ebenfalls berücksichtigt. Die Änderung wird mit dem normalen Speichern des Plans dauerhaft übernommen.
 
 Vorhandene Podeste aus Version 1.9 und älter werden nicht automatisch durch Segmentcontainer ersetzt. Ihre Identität und Referenzen bleiben erhalten. Die neue Struktur gilt für neu eingesetzte Podeste.
 
