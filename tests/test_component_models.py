@@ -8,6 +8,22 @@ from freecad.buehnensnap import decks, component_models
 
 
 class ComponentModelsTest(unittest.TestCase):
+    def test_detailed_plan_has_pickable_deck_surface_and_independent_hardware(self):
+        path = next(decks.MODELS_DIR.rglob('Buetec_standard*.FCStd'))
+        model = decks.deck_for_model('Test', path.relative_to(decks.MODELS_DIR).as_posix())
+        parts = component_models.component_specs(model, path)
+        surface = parts['PedestalDeck'][1]
+        self.assertTrue(surface.Faces, 'the plate interior must be a pickable face, not just four edges')
+        self.assertFalse(surface.Solids)
+        self.assertAlmostEqual(surface.Area, 996 * 1996, places=3)
+        self.assertTrue(any(face.isInside(App.Vector(500, 1000, model.depth), 1e-6, True)
+                            for face in surface.Faces))
+        self.assertFalse(any(face.isInside(App.Vector(1, 1, model.depth), 1e-6, True)
+                             for face in surface.Faces), 'do not fill the surrounding aluminium frame')
+        for role in component_models.ROLES[:-1]:
+            self.assertFalse(parts[role][1].isNull(), 'separately controlled 2D hardware must remain available')
+            self.assertTrue(parts[role][1].Edges)
+
     def test_detailed_symbol_retains_each_solid_exactly_once(self):
         path = next(decks.MODELS_DIR.rglob('Buetec_standard*.FCStd'))
         model = decks.deck_for_model('Test', path.relative_to(decks.MODELS_DIR).as_posix())
@@ -28,6 +44,30 @@ class ComponentModelsTest(unittest.TestCase):
         for role in component_models.ROLES[:-1]:
             self.assertTrue(parts[role][0].isNull())
             self.assertTrue(parts[role][1].isNull())
+
+    def test_legacy_contour_filling_keeps_holes_islands_and_open_lines(self):
+        def rectangle(x, y, width, height):
+            return Part.makePolygon([App.Vector(px, py, 90) for px, py in (
+                (x, y), (x + width, y), (x + width, y + height),
+                (x, y + height), (x, y))])
+
+        outer = rectangle(0, 0, 100, 100)
+        hole = rectangle(20, 20, 20, 20)
+        island = rectangle(200, 0, 20, 20)
+        line = Part.makeLine(App.Vector(300, 10, 90), App.Vector(310, 10, 90))
+        legacy = Part.Compound([outer, hole, island, line])
+        surface = component_models.fill_plan_contours(legacy)
+        self.assertEqual(len(surface.Faces), 2)
+        self.assertAlmostEqual(surface.Area, 100 * 100 - 20 * 20 + 20 * 20)
+        for point in (App.Vector(10, 10, 90), App.Vector(210, 10, 90)):
+            self.assertTrue(any(face.isInside(point, 1e-6, True) for face in surface.Faces))
+        for point in (App.Vector(30, 30, 90), App.Vector(150, 10, 90), App.Vector(305, 10, 90)):
+            self.assertFalse(any(face.isInside(point, 1e-6, True) for face in surface.Faces))
+        self.assertTrue(any(edge.isSame(line) for edge in surface.Edges),
+                        'filling a closed plate outline must retain explicit open lines')
+        self.assertFalse(surface.Solids)
+        self.assertAlmostEqual(surface.BoundBox.ZMin, 90)
+        self.assertAlmostEqual(surface.BoundBox.ZMax, 90)
 
     def test_explicit_component_names_and_custom_2d_are_honoured(self):
         document = App.newDocument('NamedComponentSource')

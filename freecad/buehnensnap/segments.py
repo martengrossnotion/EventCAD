@@ -175,7 +175,8 @@ class ComponentVisibilityObserver:
     def slotBeforeRecomputeDocument(self, document):
         # Also cover hidden/headless documents, which need not be activated.
         if not _updating and not document.Restoring and any(
-                is_segment(obj) and len(segment_groups(obj)) != len(GROUPS)
+                (is_segment(obj) and len(segment_groups(obj)) != len(GROUPS))
+                or _needs_deck_plan_upgrade(obj)
                 for obj in document.Objects):
             migrate_document(document)
 
@@ -352,12 +353,67 @@ def migrate_document(document):
     """Upgrade v2.0 folders lazily/on restore; never replace their geometry."""
     placed = [obj for obj in document.Objects if is_segment(obj)]
     with updating():
+        upgrade_deck_plan_templates(document)
         for segment in placed:
             ensure_segment_groups(segment)
         for area in {segment_area(segment) for segment in placed} - {None}:
             refresh_members(area)
         for segment in placed:
             apply_visibility(segment)
+
+
+def _needs_deck_plan_upgrade(obj):
+    # App::Link forwards these properties from its target as well. Upgrade
+    # only the embedded template itself, never the placed link instance.
+    return (obj is not None and obj.TypeId == 'Part::Feature'
+            and getattr(obj, 'StageSnapRole', None) == 'PedestalDeck'
+            and getattr(obj, 'StageSnapVariant', None) == 'Symbol2D'
+            and hasattr(obj, 'StageSnapComponentKey')
+            and getattr(obj, 'StageSnapPlanFaceVersion', 0) < 1)
+
+
+def _mark_deck_plan_surface(template):
+    if 'StageSnapPlanFaceVersion' not in template.PropertiesList:
+        template.addProperty('App::PropertyInteger', 'StageSnapPlanFaceVersion', 'Podest')
+        template.setEditorMode('StageSnapPlanFaceVersion', 2)
+    template.StageSnapPlanFaceVersion = 1
+
+
+def upgrade_deck_plan_templates(document, links=None):
+    """Fill old shared deck outlines in place, without their source FCStd file.
+
+    Preserve the existing contour, holes, open detail lines, link identities,
+    placements and visibility. Frame/corner templates are never changed.
+    """
+    from .component_models import fill_plan_contours, deck_surface_materials
+    if links is None:
+        sources = {obj.StageSnapComponentKey: obj for obj in document.Objects
+                   if obj.TypeId == 'Part::Feature'
+                   and getattr(obj, 'StageSnapRole', None) == 'PedestalDeck'
+                   and getattr(obj, 'StageSnapVariant', None) == 'Symbol3D'
+                   and hasattr(obj, 'StageSnapComponentKey')}
+        pairs = {obj: sources.get(obj.StageSnapComponentKey) for obj in document.Objects
+                 if _needs_deck_plan_upgrade(obj)}
+    else:
+        pairs = {obj.StageSnapPlanTemplate: obj.StageSnap3DTemplate for obj in links
+                 if obj.StageSnapRole == 'PedestalDeck'
+                 and _needs_deck_plan_upgrade(obj.StageSnapPlanTemplate)}
+    with updating():
+        for template, source in pairs.items():
+            before = template.Shape
+            filled = fill_plan_contours(before)
+            if not before.Faces and filled.Faces:
+                template.Shape = filled
+                if App.GuiUp:
+                    if source is not None:
+                        materials = deck_surface_materials(
+                            filled, source.Shape, source.ViewObject.ShapeAppearance)
+                        if materials:
+                            template.ViewObject.ShapeAppearance = materials
+                    else:
+                        from .appearance import apply_default_materials
+                        apply_default_materials(template, plan_view=True)
+            _mark_deck_plan_surface(template)
 
 
 def new_group(document, name, parent, label=None):
@@ -423,6 +479,7 @@ def component_templates(document, deck):
                 if obj.TypeId == 'Part::Feature'
                 and getattr(obj, 'StageSnapComponentKey', None) == key}
     if len(existing) == 12:
+        upgrade_deck_plan_templates(document)
         return existing
     specs = component_specs(deck, path)
     library = template_group(document)
@@ -440,6 +497,8 @@ def component_templates(document, deck):
                 template.addProperty('App::PropertyString', prop, 'Podest')
                 setattr(template, prop, value)
                 template.setEditorMode(prop, 2)
+            if role == 'PedestalDeck' and variant == 'Symbol2D':
+                _mark_deck_plan_surface(template)
             library.addObject(template)
             if App.GuiUp:
                 if materials:
@@ -454,7 +513,9 @@ def set_segment_mode(segment, plan_view):
     with updating():
         ensure_segment_groups(segment)
         refresh_members(segment_area(segment))
-        for obj in components(segment):
+        links = components(segment)
+        upgrade_deck_plan_templates(segment.Document, links)
+        for obj in links:
             target = obj.StageSnapPlanTemplate if plan_view else obj.StageSnap3DTemplate
             if obj.LinkedObject != target:
                 placement = obj.Placement.copy()
