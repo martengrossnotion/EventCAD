@@ -1,4 +1,4 @@
-EventCAD 2.0.0 – Event-Arbeitsbereich für FreeCAD
+EventCAD 2.2.0 – Event-Arbeitsbereich für FreeCAD
 
 Voraussetzung: FreeCAD 1.0 oder neuer.
 
@@ -16,9 +16,12 @@ Autosnap zum bündigen Andocken. Die Werkzeugleiste schaltet zwischen
 2D-Grundriss und 3D-Modell um.
 
 Pro Symbol liegt unter resources/models/<System>/<Symbol>/ genau eine
-FCStd-Datei. Sie enthält die getrennten Geometrieobjekte Symbol3D und
-Symbol2D. STEP-Dateien werden nicht mehr als Bibliotheksmodelle geladen.
-Die vorhandenen STEP-Geometrien wurden in echte FCStd-Dateien übernommen.
+FCStd-Datei. Sie enthält die Container Symbol3D und Symbol2D, jeweils mit
+derselben Unterstruktur wie ein geladenes Segment: Corners, Frame, Deck,
+Verbinder, Steckfüße und Geländer. Die Komponenten und ihre 2D-Varianten
+sind bereits in der Quelle gespeichert und werden beim Laden übernommen.
+Eine automatische Zerlegung des Gesamtmodells findet nicht mehr statt.
+STEP-Dateien werden nicht mehr als Bibliotheksmodelle geladen.
 
 Neue Podeste erhalten die Struktur Podestfläche > Views und Podestsegment.
 Views enthält ViewDecks, ViewCorners und ViewFrames als Sichtbarkeitssteuerungen.

@@ -8,6 +8,8 @@ from tempfile import TemporaryDirectory
 import FreeCAD as App
 import Part
 
+from .symbol_structure import variant_components
+
 
 def find_plan_symbol(model_path):
     """Find the single native symbol file (also resolves paths in older plans)."""
@@ -110,7 +112,23 @@ def _read_variants(path, modified_ns, size):
                     root = matches[0] if matches else None
                 if root is None:
                     continue
-                if hasattr(root, "Shape") and not root.Shape.isNull():
+                components = variant_components(root)
+                if components is not None:
+                    shapes, materials = [], []
+                    for obj in components.values():
+                        if obj.Shape.isNull():
+                            continue
+                        shape = obj.Shape.copy()
+                        shape.Placement = global_placement(obj)
+                        shapes.append(shape)
+                        if App.GuiUp:
+                            appearance = obj.ViewObject.ShapeAppearance
+                            materials.extend([appearance[0]] * len(shape.Faces)
+                                             if len(appearance) == 1 else appearance)
+                    if not shapes:
+                        raise ValueError(f'{name} enthält keine Bauteilgeometrie.')
+                    result[name] = (Part.Compound(shapes), tuple(materials))
+                elif hasattr(root, "Shape") and not root.Shape.isNull():
                     shape = root.Shape.copy()
                     shape.Placement = global_placement(root)
                     materials = tuple(root.ViewObject.ShapeAppearance) if App.GuiUp else ()
