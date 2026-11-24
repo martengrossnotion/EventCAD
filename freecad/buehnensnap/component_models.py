@@ -10,9 +10,8 @@ import Part
 
 from .appearance import ALUMINIUM_COLOR, ALUMINIUM_SPECULAR, WOOD_COLOR
 from .plan_symbols import global_placement, load_variant_appearance, load_variant_shape
+from .symbol_structure import ROLES, variant_components
 
-
-ROLES = ("CornerTL", "CornerTR", "CornerBL", "CornerBR", "PedestalFrame", "PedestalDeck")
 _MATERIAL_FIELDS = ("AmbientColor", "DiffuseColor", "SpecularColor", "EmissiveColor",
                     "Shininess", "Transparency")
 
@@ -39,6 +38,22 @@ def _read_named_components(path, modified_ns, size, gui_up):
             document = App.openDocument(str(copied), hidden=True)
             document.recompute()
             result = {}
+            roots = [_named_object(document, variant) for variant in ('Symbol3D', 'Symbol2D')]
+            trees = [variant_components(root) if root is not None else None for root in roots]
+            structured = any(tree is not None for tree in trees)
+            if structured:
+                if any(tree is None for tree in trees):
+                    raise ValueError('Symbol3D und Symbol2D müssen dieselbe Komponentenstruktur enthalten.')
+                for variant, tree in zip(('Symbol3D', 'Symbol2D'), trees):
+                    for role, obj in tree.items():
+                        shape = obj.Shape.copy()
+                        if not shape.isNull():
+                            shape.Placement = global_placement(obj)
+                            shape = Part.Compound([shape])
+                        materials = tuple(obj.ViewObject.ShapeAppearance) if gui_up else ()
+                        key = role + ('2D' if variant == 'Symbol2D' else '')
+                        result[key] = (shape, materials)
+                return result, True
             for name in (*ROLES, *(role + "2D" for role in ROLES)):
                 obj = _named_object(document, name)
                 if obj is None:
@@ -49,48 +64,12 @@ def _read_named_components(path, modified_ns, size, gui_up):
                 shape.Placement = global_placement(obj)
                 materials = tuple(obj.ViewObject.ShapeAppearance) if gui_up else ()
                 result[name] = (Part.Compound([shape]), materials)
-            return result
+            return result, False
     finally:
         for name in set(App.listDocuments()) - previous:
             App.closeDocument(name)
         if active is not None and active.Name in App.listDocuments():
             App.setActiveDocument(active.Name)
-
-
-def _fallback_components(shape):
-    """Split only a recognisable deck/frame/four-corner six-solid assembly."""
-    result = {role: Part.Shape() for role in ROLES}
-    solids = shape.Solids
-    bounds = shape.BoundBox
-    plates = [solid for solid in solids
-              if solid.BoundBox.XLength > bounds.XLength * 0.8
-              and solid.BoundBox.YLength > bounds.YLength * 0.8
-              and solid.BoundBox.ZLength < bounds.ZLength * 0.5]
-    if len(solids) != 6 or len(plates) != 1:
-        result["PedestalDeck"] = shape
-        return result
-    plate = plates[0]
-    remaining = [solid for solid in solids if not solid.isSame(plate)]
-    frame = max(remaining, key=lambda solid: solid.BoundBox.XLength * solid.BoundBox.YLength)
-    if (frame.BoundBox.XLength < bounds.XLength * 0.8
-            or frame.BoundBox.YLength < bounds.YLength * 0.8):
-        result["PedestalDeck"] = shape
-        return result
-    result["PedestalDeck"] = plate
-    result["PedestalFrame"] = frame
-    center = bounds.Center
-    for corner in remaining:
-        if corner.isSame(frame):
-            continue
-        side_x = "L" if corner.BoundBox.Center.x < center.x else "R"
-        side_y = "T" if corner.BoundBox.Center.y > center.y else "B"
-        role = "Corner" + side_y + side_x
-        if not result[role].isNull():
-            # Ambiguous geometry must remain complete instead of losing a solid.
-            return {name: shape if name == "PedestalDeck" else Part.Shape()
-                    for name in ROLES}
-        result[role] = corner
-    return result
 
 
 def _face_materials(component, source, source_materials):
@@ -203,9 +182,9 @@ def deck_surface_materials(plan, source, source_materials):
 def component_specs(deck, model_path=None):
     """Return all six roles as (shape3d, shape2d, materials3d, materials2d).
 
-    Every component uses the segment's shared coordinate system. Missing parts
-    are empty shapes. Simple symbols remain whole under PedestalDeck, with the
-    complete supplied Symbol2D; no fictitious corner/frame solids are generated.
+    Structured sources already contain the component tree and both variants.
+    Copy those explicit parts without splitting solids or projecting geometry.
+    Legacy monolithic symbols remain whole under PedestalDeck.
     """
     if model_path is None and getattr(deck, "model_file", None):
         # Lazy import avoids a cycle when decks imports this module.
@@ -216,14 +195,15 @@ def component_specs(deck, model_path=None):
         plan = Part.makePlane(deck.length, deck.width)
         source_materials = []
         named = {}
+        structured = False
     else:
         path = Path(model_path)
         whole = load_variant_shape(path, "Symbol3D")
         plan = load_variant_shape(path, "Symbol2D")
         source_materials = load_variant_appearance(path, "Symbol3D")
         revision = path.stat()
-        named = _read_named_components(str(path), revision.st_mtime_ns, revision.st_size,
-                                       bool(App.GuiUp))
+        named, structured = _read_named_components(str(path), revision.st_mtime_ns,
+                                                   revision.st_size, bool(App.GuiUp))
     bounds = whole.BoundBox
     if abs(bounds.XLength - deck.length) > 0.1 or abs(bounds.YLength - deck.width) > 0.1:
         raise ValueError(f"Die Komponenten-Grundfläche muss {deck.length:g} × {deck.width:g} mm messen.")
@@ -231,20 +211,28 @@ def component_specs(deck, model_path=None):
     if abs(plan_bounds.XLength - deck.length) > 0.1 or abs(plan_bounds.YLength - deck.width) > 0.1:
         raise ValueError("Die 2D-Grundfläche stimmt nicht mit den Podestmaßen überein.")
     shift = App.Vector(-bounds.XMin, -bounds.YMin, deck.depth - bounds.ZMax)
-    parts = _fallback_components(whole)
-    split = not parts["PedestalFrame"].isNull()
+    plan_shift = App.Vector(-plan_bounds.XMin, -plan_bounds.YMin,
+                            deck.depth - plan_bounds.ZMin)
+    explicit = [role for role in ROLES if role in named]
+    if explicit and len(explicit) != len(ROLES):
+        raise ValueError('Benannte Komponenten müssen alle sechs Bauteile explizit enthalten: '
+                         + ', '.join(role for role in ROLES if role not in named))
+    parts = {role: Part.Shape() for role in ROLES}
+    if not explicit:
+        parts['PedestalDeck'] = whole
     result = {}
     for role in ROLES:
         if role in named:
             raw, existing = named[role]
             raw = raw.copy()
-            if not raw.isValid() or not raw.Solids:
+            if (not raw.isNull() and (not raw.isValid() or not raw.Solids)) or (
+                    raw.isNull() and not structured):
                 raise ValueError(f"{role} muss gültige Volumengeometrie enthalten.")
         else:
             raw = parts[role]
             existing = _face_materials(raw, whole, source_materials)
-        mixed = role == "PedestalDeck" and not split and role not in named
-        materials3d = _materials(raw, role, existing, preserve_mixed=mixed)
+        mixed = role == "PedestalDeck" and not explicit
+        materials3d = _materials(raw, role, existing, preserve_mixed=structured or mixed)
         shape3d = raw.copy()
         if not shape3d.isNull():
             shape3d.translate(shift)
@@ -253,11 +241,14 @@ def component_specs(deck, model_path=None):
         if planar_name in named:
             shape2d, existing2d = named[planar_name]
             shape2d = shape2d.copy()
-            if not shape2d.isValid() or shape2d.Solids or shape2d.BoundBox.ZLength > 0.01:
+            if not shape2d.isNull() and (not shape2d.isValid() or shape2d.Solids
+                                        or shape2d.BoundBox.ZLength > 0.01):
                 raise ValueError(f"{planar_name} muss flach und parallel zur XY-Ebene sein.")
-            shape2d.translate(App.Vector(shift.x, shift.y, deck.depth - shape2d.BoundBox.ZMin))
-            shape2d = Part.Compound([shape2d])
-        elif role == "PedestalDeck" and not split and role not in named:
+            if not shape2d.isNull():
+                shape2d.translate(plan_shift if structured else App.Vector(
+                    shift.x, shift.y, deck.depth - shape2d.BoundBox.ZMin))
+                shape2d = Part.Compound([shape2d])
+        elif role == "PedestalDeck" and role not in named:
             shape2d = plan.copy()
             plan_bounds = shape2d.BoundBox
             shape2d.translate(App.Vector(-plan_bounds.XMin, -plan_bounds.YMin,
@@ -272,8 +263,8 @@ def component_specs(deck, model_path=None):
         else:
             shape2d = _project_contours(shape3d, deck.depth)
             existing2d = []
-        if role == 'PedestalDeck':
+        if role == 'PedestalDeck' and not structured:
             shape2d = fill_plan_contours(shape2d)
-        materials2d = _materials(shape2d, role, existing2d)
+        materials2d = _materials(shape2d, role, existing2d, preserve_mixed=structured)
         result[role] = (shape3d, shape2d, materials3d, materials2d)
     return result

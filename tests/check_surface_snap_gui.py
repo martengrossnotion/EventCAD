@@ -48,6 +48,8 @@ def deck_link(segment):
 
 def configure_view(document):
     update(document)
+    App.setActiveDocument(document.Name)
+    Gui.setActiveDocument(document.Name)
     view = Gui.getDocument(document.Name).activeView()
     view.setCameraType('Orthographic')
     view.viewTop()
@@ -131,8 +133,56 @@ def check_surface_click_and_independent_views(model):
 
         # An interior point near the desired edge must reach the same picker
         # and deferred placement path used by a real autosnap mouse click.
-        point = App.Vector(model.length - 60, model.width * .3, model.depth)
+        # Keep a face-test pixel outside the native pick radius of the
+        # coplanar frame contour. Structured sources correctly render hardware
+        # at the deck's world height, rather than below the plate.
+        point = App.Vector(model.length - 100, model.width * .3, model.depth)
         pixel = assert_deck_face_pick(document, segment, point)
+        panel = StageSnapDock(Gui.getMainWindow())
+        panel.selected_deck = model
+        panel.model_error = None
+        panel.rotation.setCurrentIndex(1)
+        panel.view = view
+        panel.document_name = document.Name
+        callback = ClickCallback(pixel)
+        panel.on_click(callback)
+        assert callback.handled and panel.pending is not None, panel.status.text()
+        for _ in range(10):
+            QtWidgets.QApplication.processEvents()
+            if panel.pending is None:
+                break
+        placed = [obj for obj in document.Objects if segments.is_segment(obj)]
+        assert len(placed) == 2, panel.status.text()
+        other = next(obj for obj in placed if obj != segment)
+        assert segments.segment_area(other) == segments.segment_area(segment)
+        assert other.StageSnapPlanView
+    finally:
+        if panel is not None:
+            panel.stop_snap()
+            panel.close()
+        App.closeDocument(document.Name)
+
+
+def check_hardware_edge_click_at_the_deck_height(model):
+    document = App.newDocument('HardwareEdgeAutosnapCheck')
+    panel = None
+    try:
+        segment = decks.insert_deck(document, model,
+                                    decks.seed_placement(model, 0, 0, 300, 1), plan_view=True)
+        view = configure_view(document)
+        view_modes.show_mode(document, view, '2D')
+        control_for(segment, 'Decks').Enabled = False
+        control_for(segment, 'Corners').Enabled = False
+        update(document)
+        point = App.Vector(model.length, model.width * .3, model.depth)
+        pixel, hit = pick_local(document, segment, point)
+        assert hit and hit['Component'].startswith('Edge'), 'the frame contour must be pickable'
+        picked = document.getObject(hit['Object'])
+        assert picked.StageSnapRole == 'PedestalFrame'
+        assert decks.deck_from_pick(picked) == segment
+        assert abs(hit['z'] - 300) < 1e-4, \
+            'native frame rendering must use the same world height as the 2D deck'
+
         panel = StageSnapDock(Gui.getMainWindow())
         panel.selected_deck = model
         panel.model_error = None
@@ -201,8 +251,9 @@ try:
     path = next(decks.MODELS_DIR.rglob('Buetec_standard*.FCStd'))
     model = decks.deck_for_model('Test', path.relative_to(decks.MODELS_DIR).as_posix())
     check_surface_click_and_independent_views(model)
+    check_hardware_edge_click_at_the_deck_height(model)
     check_embedded_wire_plan_upgrade(model)
-    print('2D deck face picking, independent hardware views, real autosnap callback '
+    print('2D deck face picking, coplanar hardware edge height/picking, independent hardware views, real autosnap callbacks '
           'and source-independent embedded-wire upgrade passed.', flush=True)
 finally:
     for name in list(App.listDocuments()):

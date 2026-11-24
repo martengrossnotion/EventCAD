@@ -5,12 +5,7 @@ from contextlib import contextmanager
 import FreeCAD as App
 
 from .plan_symbols import global_placement
-
-ROLES = ('CornerTL', 'CornerTR', 'CornerBL', 'CornerBR', 'PedestalFrame', 'PedestalDeck')
-CATEGORIES = {'Corners': ROLES[:4], 'Frames': ('PedestalFrame',), 'Decks': ('PedestalDeck',)}
-GROUPS = (('Corners', 'Corners', 'Corners'), ('Frame', 'Frame', 'Frames'),
-          ('Deck', 'Deck', 'Decks'), ('Verbinder', 'Verbinder', 'Connectors'),
-          ('Steckfuesse', 'Steckfüße', 'Legs'), ('Gelaender', 'Geländer', 'Railings'))
+from .symbol_structure import ROLES, CATEGORIES, GROUPS
 _updating = 0
 _observer = None
 

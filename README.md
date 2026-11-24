@@ -18,33 +18,44 @@ Manuell: **Code → Download ZIP**, entpacken und den Add-on-Ordner nach `Mod` i
 
 **2D-Grundriss** zeigt die flachen Symbole auf Höhe der Podestoberkante. **3D-Modell** zeigt die Volumenkörper. Der Modus wird im Plan gespeichert. Autosnap funktioniert in beiden Ansichten; die Zielkanten müssen parallel zu den X-/Y-Achsen des Plans liegen.
 
-Im 2D-Grundriss ist die Podestplatte eine anklickbare Fläche. Für Autosnap innerhalb dieser Fläche nahe der gewünschten Kante und Ecke klicken; Rahmenkanten müssen dafür nicht getroffen werden. Platte, Rahmen und Ecken bleiben über ihre eigenen View-Schalter getrennt sichtbar. Die automatisch erzeugte Plattenfläche verwendet den tatsächlichen oberen Umriss der Platte einschließlich vorhandener Aussparungen.
+Im 2D-Grundriss ist die Podestplatte eine anklickbare Fläche. Für Autosnap innerhalb dieser Fläche nahe der gewünschten Kante und Ecke klicken; Rahmenkanten müssen dafür nicht getroffen werden. Platte, Rahmen und Ecken bleiben über ihre eigenen View-Schalter getrennt sichtbar. Die mitgelieferte Plattenfläche entspricht dem tatsächlichen oberen Umriss der Platte einschließlich vorhandener Aussparungen.
 
 ## Eine FCStd-Datei pro Symbol
 
 Unter `freecad/buehnensnap/resources/models/<System>/<Symbol>/` liegt pro Symbol genau **eine .FCStd-Datei**. Dateiname und Groß-/Kleinschreibung der Endung sind beliebig. Das Dropdown zeigt die Symbolordner des gewählten Systems; bekannte Kataloggrößen werden als Maß angezeigt. Mehrere FCStd-Dateien im selben Symbolordner führen zu einer Warnung; der Ordner wird übersprungen. STEP-Dateien werden nicht mehr als Bibliotheksmodelle verwendet.
 
-Die FCStd-Datei enthält zwei getrennte Geometrieobjekte:
+Die FCStd-Datei enthält zwei native Part-Container. Beide enthalten bereits dieselbe Komponentenstruktur wie ein später platziertes Podestsegment:
 
 | Objektname oder eindeutige Bezeichnung | Inhalt |
 | --- | --- |
-| `Symbol3D` | Fertiger Volumenkörper oder Compound mehrerer Volumenkörper; auch der fertige Body ist möglich |
-| `Symbol2D` | Skizze, Linien oder flache Part-Geometrie parallel zur XY-Ebene |
+| `Symbol3D` (Label „3D-Modell“) | 3D-Komponenten in den sechs Untergruppen |
+| `Symbol2D` (Label „2D-Grundriss“) | Fertige flache Komponenten in denselben sechs Untergruppen |
 
-Die Sichtbarkeit dieser Objekte in der Quelldatei ist für den Import unerheblich. Hilfsgeometrie und weitere Konstruktionsobjekte werden nicht separat eingelesen. Beide Varianten müssen als Objekt mit fertiger `Shape` vorliegen; eine reine Dokumentgruppe reicht nicht. Für mehrere Körper eignet sich ein Part-Compound.
+| Untergruppe in jeder Variante | Enthaltene Objekte in dieser Reihenfolge |
+| --- | --- |
+| `Corners` | `CornerTL`, `CornerTR`, `CornerBL`, `CornerBR` |
+| `Frame` | `PedestalFrame` |
+| `Deck` | `PedestalDeck` |
+| `Verbinder` | zunächst leer |
+| `Steckfüße` | zunächst leer |
+| `Geländer` | zunächst leer |
+
+Die sichtbaren Bezeichnungen der Komponenten sind in beiden Varianten identisch. Die internen 2D-Objektnamen tragen zur Unterscheidung das Suffix `2D`, beispielsweise `PedestalDeck2D`. Die Quelldatei lässt sich direkt in FreeCAD öffnen, aufklappen und komponentenweise bearbeiten. Die Sichtbarkeit beim Speichern beeinflusst den Import nicht.
+
+Beim Laden werden die vorhandenen Komponenten und ihre gespeicherten 2D-/3D-Geometrien übernommen. Es gibt keine automatische Zerlegung des Gesamtmodells und keine erneute Projektion der strukturierten 2D-Komponenten. Die Gruppen und ihre Zuordnungen werden geprüft; fehlende oder falsch einsortierte Komponenten ergeben eine Fehlermeldung. Die Zubehörgruppen bleiben zunächst leer. Zusätzliche Inhalte darin werden ausdrücklich abgewiesen, solange kein entsprechender Zubehörimport implementiert ist; sie werden nicht stillschweigend verworfen.
 
 Beispiel: `buetec-standard/2000x1000/2000x1000.FCStd` enthält `Symbol3D` und `Symbol2D`.
 
 ## Modelle bearbeiten oder austauschen
 
 1. Öffne die FCStd-Datei im jeweiligen Symbolordner.
-2. Bearbeite das 3D-Modell oder ersetze es durch deine Originalkonstruktion. Benenne das fertige Objekt im Modellbaum eindeutig **Symbol3D**. Bei den mitgelieferten Dateien sind die internen Objektnamen bereits entsprechend gesetzt.
-3. Erstelle oder bearbeite das flache Objekt und benenne es eindeutig **Symbol2D**. Zeichne 1:1 in Millimetern, parallel zur XY-Ebene. Eine TechDraw-Seite ist keine Symbolgeometrie.
+2. Klappe **3D-Modell** auf und bearbeite die Bauteile unter Corners, Frame und Deck. Ein fertiger Body oder ein Compound kann als Komponente dienen, wenn er eine fertige Shape besitzt. Gruppen und Komponentenbezeichnungen beibehalten.
+3. Bearbeite die passenden Bauteile unter **2D-Grundriss**. Zeichne 1:1 in Millimetern, parallel zur XY-Ebene. Die Platte sollte als Fläche vorliegen, damit ihre Innenseite anklickbar ist. Eine TechDraw-Seite ist keine Symbolgeometrie. Änderungen an der 3D-Geometrie erzeugen keine automatische neue 2D-Variante.
 4. Richte Länge in X, Breite in Y und Höhe in Z aus. Die 2D-Grundfläche muss den X-/Y-Abmessungen des 3D-Modells entsprechen. Bei Katalogmodellen muss das Modell das Katalogmaß einhalten. Der höchste Punkt des 3D-Modells gilt als Oberkante; Füße dürfen nach unten reichen. Beide Varianten werden am minimalen X/Y ausgerichtet, das 2D-Symbol auf Oberkantenhöhe gesetzt.
 5. Speichere die Datei. Belasse genau eine FCStd-Datei im Symbolordner. Speichere Sicherungskopien mit Endung .FCStd außerhalb dieses Ordners.
 6. Öffne Podest erneut, um zusätzliche Symbolordner einzulesen. Platziere das bearbeitete Symbol neu. Für zusätzliche Modelle werden die Planungsmaße aus der 3D-Geometrie ermittelt.
 
-Die mitgelieferten 3D-Objekte wurden vorläufig aus den bisherigen STEP-Dateien übernommen. Sie sind statische Part-Geometrien ohne ursprüngliche Konstruktionshistorie. Die Originalkonstruktion kann später in derselben FCStd-Datei ergänzt werden.
+Die mitgelieferten 3D-Objekte stammen aus den bisherigen STEP-Dateien. Sie liegen nun als ausdrücklich benannte Komponenten vor, weiterhin ohne ursprüngliche Konstruktionshistorie. Die Originalkonstruktion kann später innerhalb derselben Struktur ergänzt werden. Vereinfachte Quadersymbole behalten ihren vollständigen Körper unter Deck. Ihre Rahmen-/Eckobjekte sind ausdrücklich leere Platzhalter; es werden keine Bauteile erfunden.
 
 ## Struktur der Podestflächen
 
@@ -72,9 +83,11 @@ Bereits das erste Startpodest erhält eine eigene Podestfläche. Per Autosnap od
 
 ## Komponenten in der Symboldatei
 
-Für eindeutig bearbeitbare Komponenten können in der FCStd-Datei zusätzlich zu Symbol3D/Symbol2D die fertigen Objekte CornerTL, CornerTR, CornerBL, CornerBR, PedestalFrame und PedestalDeck angelegt werden. Namen oder eindeutige Labels werden erkannt. Alle Teile verwenden dasselbe Koordinatensystem wie Symbol3D; T steht für die positive Y-Seite, L für die negative X-Seite. Optionale flache Varianten heißen beispielsweise PedestalDeck2D oder CornerTL2D. Ohne eigene 2D-Komponente wird bei der Platte die obere horizontale Fläche übernommen; Rahmen und Ecken erhalten projizierte Konturen. Geschlossene reine Plattenkonturen werden zu anklickbaren Flächen ergänzt. Löcher, getrennte Teilflächen und zusätzliche offene Detaillinien bleiben erhalten; eigene offene Linien werden nicht durch eine erfundene Rechteckfläche ersetzt.
+Die Rollen der Bauteile stehen bereits in der oben beschriebenen Quellstruktur fest. Alle Teile einer Variante verwenden deren gemeinsames Koordinatensystem; T steht für die positive Y-Seite, L für die negative X-Seite. Beim Import wird jede Variante als Ganzes normalisiert. Die relativen Positionen ihrer Komponenten bleiben erhalten, auch bei verschobenen oder gedrehten Quellcontainern. Die gemeinsame Normalisierung ist nötig, weil bisherige 3D- und 2D-Quellen unterschiedliche Ursprünge besitzen können.
 
-Das vorhandene detaillierte Bütec-Modell wird anhand seiner sechs vorhandenen Volumenkörper in Deck, Rahmen und vier Ecken zerlegt. Es werden keine neuen Volumenkörper erfunden. Vereinfachte Gesamtmodelle ohne getrennte Bauteile bleiben vollständig unter PedestalDeck. Ihre übrigen fünf Einträge sind leere Platzhalter und bleiben unsichtbar; die Baumstruktur ist trotzdem identisch. Für getrennt schaltbare Rahmen/Ecken benötigen solche Modelle entsprechende echte Komponenten.
+Alle 14 mitgelieferten Symboldateien besitzen diese Struktur für beide Varianten. Das detaillierte Bütec-Modell enthält sechs echte 3D-Komponenten. Seine vorhandenen Volumenkörper, die matten Holzflächen und glänzenden Aluminiumflächen bleiben erhalten. Die 2D-Platte ist eine anklickbare Fläche; Rahmen und Ecken besitzen eigene gespeicherte Konturen.
+
+Alte monolithische FCStd-Dateien mit Symbol3D/Symbol2D bleiben ladbar. Ohne explizite Komponenten wird deren gesamte Geometrie unter PedestalDeck übernommen; der Lader errät keine Bauteilrollen aus den Volumenkörpern mehr. Die ältere flache Variante mit sechs ausdrücklich benannten 3D-Komponenten bleibt ebenfalls kompatibel. Nur bei diesem Altformat können fehlende 2D-Komponenten noch aus dem 3D-Modell abgeleitet werden.
 
 ## Wiederverwendung in großen Plänen
 
@@ -100,7 +113,9 @@ Fehlt bei einem alten Plan die Quelldatei oder ist sie ungültig, bleibt der ein
 
 ## Entwicklung und Prüfung
 
-`decks.py` verwaltet Katalog und Autosnap. `segments.py` verwaltet Segmentbaum und View-Steuerungen, `component_models.py` liest die Bauteilgeometrien. `plan_symbols.py` lädt die Varianten einer FCStd-Datei revisionsabhängig, ohne offene Originaldokumente zu verändern. `view_modes.py` steuert die Sichtbarkeit. `panel.py` stellt die Bedienoberfläche bereit.
+`decks.py` verwaltet Katalog und Autosnap. `segments.py` verwaltet Segmentbaum und View-Steuerungen, `component_models.py` liest die Bauteilgeometrien. `symbol_structure.py` definiert die gemeinsame Quell-/Segmentstruktur und prüft die Komponentenpfade. `plan_symbols.py` lädt die Varianten einer FCStd-Datei revisionsabhängig, ohne offene Originaldokumente zu verändern. `view_modes.py` steuert die Sichtbarkeit. `panel.py` stellt die Bedienoberfläche bereit.
+
+`tests/convert_symbol_structure.py` ist ein einmaliges Maintainer-Werkzeug für die Konvertierung alter Bibliotheksdateien. Nur dieses Werkzeug zerlegt gegebenenfalls das alte Bütec-Gesamtmodell und speichert die ausdrücklich benannten Komponenten und 2D-Formen in der Quelle. Es wird beim Platzieren nicht ausgeführt.
 
 Mit FreeCADs Python-Bibliotheken: `python -m unittest discover -s tests -v`. Falls bereits ein anderes EventCAD installiert ist, muss zum Testen dieses Checkouts dessen Pfad im Python-Namensraum `freecad` Vorrang haben; bereits geladene `freecad.buehnensnap`-Module müssen entfernt werden.
 
